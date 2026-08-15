@@ -1,0 +1,306 @@
+; vim:ft=dosini
+
+[module/i3]
+type = internal/i3
+format = <label-state> <label-mode>
+index-sort = true
+wrapping-scroll = false
+
+; Only show workspaces on the same output as the bar
+; pin-workspaces = true
+
+label-active-font = 1
+
+label-mode-padding = 2
+label-mode-foreground = ${colors.background}
+label-mode-background = ${colors.select4}
+
+; focused = Active workspace on focused monitor
+label-focused = %index%
+label-focused-underline= ${colors.select3}
+label-focused-padding = 2
+
+; unfocused = Inactive workspace on any monitor
+label-unfocused = %index%
+label-unfocused-padding = 2
+
+; visible = Active workspace on unfocused monitor
+label-visible = %index%
+label-visible-underline = ${colors.passive}
+label-visible-padding = 2
+
+; urgent = Workspace with urgency hint set
+label-urgent = %index%
+label-urgent-underline = ${colors.highlight}
+label-urgent-padding = 2
+
+; Separator in between workspaces
+; label-separator = |
+
+; [module/spotify]
+; type = custom/script
+; interval = 1
+; format-prefix = ""
+; format = <label>
+; exec = python $HOME/.config/polybar/scripts/spotify_status.py -f '{artist} - {song}' --font 1 --trunclen 80
+; format-foreground = ${colors.select4}
+
+[module/cpu]
+type = internal/cpu
+interval = 1
+
+format = <label><ramp-load>
+label = %percentage:2%%
+label-font = 2
+ramp-load-padding = 0
+label-padding = 1
+
+ramp-load-0 = 
+ramp-load-0-foreground = ${colors.select1}
+ramp-load-1 = 
+ramp-load-1-foreground = ${colors.select1}
+ramp-load-2 = 
+ramp-load-2-foreground = ${colors.select1}
+ramp-load-3 = 
+ramp-load-3-foreground = ${colors.select1}
+ramp-load-4 = 
+ramp-load-4-foreground = ${colors.select1}
+ramp-load-5 = 
+ramp-load-5-foreground = ${colors.select1}
+ramp-load-6 = 
+ramp-load-6-foreground = ${colors.select1}
+ramp-load-7 = 
+ramp-load-7-foreground = ${colors.select1}
+ramp-load-8 = 
+ramp-load-8-foreground = ${colors.select1}
+ramp-load-9 = 
+ramp-load-9-foreground = ${colors.notify}
+ramp-load-10 = 
+ramp-load-10-foreground = ${colors.highlight}
+
+
+[module/show-desktop]
+type = custom/text
+
+content =
+
+click-left = i3-msg workspace 25:Desktop
+
+[module/memory]
+type = internal/memory
+interval = 3
+
+format = <ramp-used><label>
+
+label = %percentage_used%%
+ramp-used-padding = 0
+label-padding = 1
+label-font = 2
+
+ramp-used-0 = 
+ramp-used-0-foreground = ${colors.select1}
+ramp-used-1 = 
+ramp-used-1-foreground = ${colors.select1}
+ramp-used-2 = 
+ramp-used-2-foreground = ${colors.select1}
+ramp-used-3 = 
+ramp-used-3-foreground = ${colors.select1}
+ramp-used-4 = 
+ramp-used-4-foreground = ${colors.select1}
+ramp-used-5 = 
+ramp-used-5-foreground = ${colors.select1}
+ramp-used-6 = 
+ramp-used-6-foreground = ${colors.select1}
+ramp-used-7 = 
+ramp-used-7-foreground = ${colors.select1}
+ramp-used-8 = 
+ramp-used-8-foreground = ${colors.select1}
+ramp-used-9 = 
+ramp-used-9-foreground = ${colors.notify}
+ramp-used-10 = 
+ramp-used-10-foreground = ${colors.highlight}
+
+[module/github]
+type= internal/github
+
+token = ${file:~/.config/polybar/github.token}
+user = rgutzen
+
+api-url = https://hub.example.org/api/v3/
+
+empty-notifications = false
+interval = 10
+
+format = <label>
+label =  %notifications%
+label-offline = 
+label-offline-foreground = ${colors.select2}
+
+[module/filesystem-icon]
+type = internal/fs
+
+mount-0 = /
+
+interval = 10
+fixed-values = true
+
+format-mounted = <label-mounted>
+label-mounted =  
+label-mounted-font = 2
+label-mounted-foreground = ${colors.select1}
+
+
+[module/filesystem]
+type = internal/fs
+
+mount-0 = /
+
+interval = 10
+fixed-values = true
+
+format-mounted = <label-mounted>
+label-mounted =  %percentage_free%%
+label-mounted-font = 2
+label-mounted-foreground = ${colors.select1}
+
+
+[module/vpn-status]
+type = custom/script
+exec = echo vpn
+exec-if = nmcli -t connection show --active | awk -F ':' '/tun0/{vpn="On"} /vpn/{name=$1} END{if(vpn) printf("%s %s", name, vpn)}'
+interval = 5
+
+
+[module/network]
+type = internal/network
+interface = wlp59s0
+
+interval = 3
+
+format-connected = <label-connected>
+
+label-connected = %signal:3% MBit/s %upspeed:8% %downspeed:8%
+label-connected-foreground = ${colors.select3}
+label-connected-font = 2
+
+[module/temperature]
+type = internal/temperature
+
+thermal-zone = 0
+base-temperature = 20
+warn-temperature = 70
+
+; Format
+format = <ramp> <label>
+label = %temperature-c%
+label-font = 2
+ramp-padding = 1
+ramp-0 = 
+ramp-0-foreground = ${colors.select2}
+ramp-1 = 
+ramp-1-foreground = ${colors.select2}
+ramp-2 = 
+ramp-2-foreground = ${colors.select2}
+ramp-3 = 
+ramp-3-foreground = ${colors.select2}
+ramp-4 = 
+ramp-4-foreground = ${colors.notify}
+
+format-warn = <label-warn>
+
+label-warn =  %temperature-c%
+label-warn-font = 2
+label-warn-padding = 2
+label-warn-foreground = ${colors.highlight}
+label-warn-underline = ${colors.highlight}
+
+
+[module/pulseaudio]
+type = internal/pulseaudio
+
+format-volume = <ramp-volume><label-volume>
+label-volume = %percentage%%
+label-volume-font = 2
+label-volume-foreground = ${colors.select0}
+
+label-muted = 
+label-muted-foreground = ${colors.select2}
+
+ramp-volume-0 = 
+ramp-volume-1 = 
+ramp-volume-2 = 
+ramp-volume-foreground = ${colors.passive}
+ramp-volume-padding = 2
+
+[module/date-icon]
+type = internal/date
+interval = 1.0
+; See "http://en.cppreference.com/w/cpp/io/manip/put_time" for details on how to format the date string
+; NOTE: if you want to use syntax tags here you need to use %%{...}
+date = %H:%M
+
+date-alt = %d %b %Y
+
+format = <label>
+label =  
+label-margin = 0
+label-active-font = 2
+label-font = 2
+label-foreground = ${colors.select3}
+
+[module/date]
+type = internal/date
+interval = 1.0
+; See "http://en.cppreference.com/w/cpp/io/manip/put_time" for details on how to format the date string
+; NOTE: if you want to use syntax tags here you need to use %%{...}
+date = %H:%M
+
+date-alt = %d %b %Y
+
+format = <label>
+label =  %date%
+label-margin = 0
+label-active-font = 2
+label-font = 2
+label-foreground = ${colors.select3}
+
+[module/battery]
+type = internal/battery
+
+full-at = 99
+time-format = %H:%M
+
+battery = ${config.battery-bat}
+adapter = ${config.battery-adp}
+
+label-active-font = 2
+
+format-charging = <label-charging>
+label-charging =  %percentage:2%%
+label-charging-foreground = ${colors.notify}
+; label-charging-underline = ${colors.success}
+
+format-discharging = <ramp-capacity> <label-discharging>
+label-discharging = %percentage:2%%
+
+ramp-capacity-0 = 
+ramp-capacity-0-foreground = ${colors.highlight}
+ramp-capacity-1 = 
+ramp-capacity-1-foreground = ${colors.notify}
+ramp-capacity-2 = 
+ramp-capacity-2-foreground = ${colors.select2}
+ramp-capacity-3 = 
+ramp-capacity-3-foreground = ${colors.select2}
+ramp-capacity-4 = 
+ramp-capacity-4-foreground = ${colors.select2}
+
+label-full = 
+label-full-foreground = ${colors.success}
+
+[module/control-center]
+type = custom/text
+content = 
+click-left = gnome-control-center
+label = %content%
+label-padding = 1
+content-foreground = ${colors.select4}

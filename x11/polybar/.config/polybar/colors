@@ -1,0 +1,40 @@
+; vim:ft=dosini
+
+[colors]
+
+
+; background = #262626
+; passive    = #9f589f
+; notify     = #b8b040  
+; success    = #55a355
+; highlight  = #953c45
+; select0    = #9e9e9e
+; select1    = #b8b040
+; select2    = #55a355
+; select3    = #248191
+; select4    = #9f589f
+
+
+; background = #224851
+; passive    = #B48EAD
+; notify     = #EBCB8B
+; success    = #A3BE8C
+; highlight  = #BF616A
+; select0    = #F1DED6
+; select1    = #D0BAB6
+; select2    = #666666
+; select3    = #839B9E
+; select4    = #81A1C1
+
+; background = #2E3440
+; buffer = #3B4252
+; foreground = #D8DEE9
+; nord6 = #ECEFF4
+; nord7 = #8FBCBB
+; nord8 = #88C0D0
+; nord9 = #81A1C1
+; urgent = #BF616A
+; warning = #D08770
+; notify = #EBCB8B
+; success = #A3BE8C
+; function = #B48EAD
