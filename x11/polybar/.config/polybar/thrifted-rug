@@ -1,0 +1,511 @@
+; vim:ft=dosini
+
+[config]
+# DPI value for HiDPI screen
+dpi = 95
+
+# bar position, apply globally
+width = 100%
+height = 20
+offset-x = 0%
+offset-y = 0%
+radius = 0.0
+
+fixed-center = false
+override-redirect = false
+
+# module list:
+# alsa: Display current volume
+# backlight: Display screen brightness
+# date: Display date
+# notify: Notify icon, can customize its binding
+# network-short: Network connect icon, can customize its binding
+# battery: Battery info
+# keyboard: CapsLock indicator
+# mpd: mpd status and controls
+# i3: i3 workspace icons
+# workspace-name: i3 current workspace name, need to be in the format like "1:Home"
+# title: title of the active window
+# network-detail: Download and upload speed
+# weather: Display openweather info
+# info-hackspeed: Numper of characters clicked per minute
+# daily-poem: Display poem
+# temperature: Display internal temperature
+# memory: Display memory usage
+# cpu: Display cpu usage
+# show-desktop: Display desktop (i3 only)
+
+# Top modules
+; top-left = title
+; top-center = mpd
+; top-right = keyboard backlight pulseaudio-control battery network-short date
+
+# Bottom modules
+bottom-left = i3 network-connection-icon network-connection network-upload-icon network-upload network-download-icon network-download
+bottom-center =
+bottom-right = cpu memory temperature space filesystem-icon filesystem pulseaudio space battery space control-center space date-icon date
+
+# global style
+line-size = 3
+
+# Modules configure option
+# the default value in this section should work in most cases,
+# if some of them doesn't suit your environment, you can change
+# it from here.
+# network interface, check by `ip link show`
+interface = wlp59s0
+
+# when the current battery capacity excess this value,
+# the full-capacity format will be displayed.
+battery-full-at = 95
+
+# battery and adapter
+battery-bat = BAT0
+battery-adp = AC
+
+# soundcard setting
+master-soundcard = default
+speaker-soundcard = default
+headphone-soundcard = default
+master-mixer = Master
+
+# mpd service connection setting
+mpd-host = 127.0.0.1
+mpd-port = 6600
+
+thermal-zone = 0
+# Base temperature for where to start the ramp (in degrees celsius)
+base-temperature = 20
+# Threshold temperature to display warning label (in degrees celsius)
+warn-temperature = 70
+
+# GitHub personal token, generate from https://github.com/settings/tokens/new?scopes=notifications&description=Notifier+for+Polybar
+# where select at least `notifications` option
+github-token = ${file:~/.config/polybar/github.token}
+
+# notify module setting
+notify-click-left = xdotool key control+grave
+
+# network module setting
+network-click-left = i3-msg workspace 2
+
+# i3
+# Only show workspaces defined on the same output as the bar
+#
+# Useful if you want to show monitor specific workspaces
+# on different bars
+#
+# Default: false
+i3-pin-workspaces = true
+
+
+[colors]
+; Core Background Colors
+background = #231e1c
+background-alt = #1a1614
+surface = #2c2522
+
+; Text Colors
+foreground = #bdb7b1
+foreground-alt = #dbd7d2
+disabled = #7c7570
+
+; Accent Colors - Primary Palette
+primary = #8fb573
+primary-dark = #5c7c58
+primary-light = #a8c498
+
+; Accent Colors - Other Families
+rose = #b77e99
+rose-dark = #8e5568
+rose-light = #d2a2b6
+
+amber = #d4a373
+amber-dark = #b3894f
+amber-light = #e8c196
+
+teal = #76b0a6
+teal-dark = #4f8d84
+teal-light = #9accc4
+
+lavender = #8a98c6
+lavender-dark = #5d6f9e
+lavender-light = #abb5d9
+
+; Functional Colors
+alert = #c67676
+success = #76b0a6
+info = #8a98c6
+warning = #d4a373
+special = #a37d63
+
+
+; [module/tray]
+; type = internal/tray
+
+; format-margin = 8px
+; tray-spacing = 8px
+; tray-background = ${colors.background}
+; tray-foreground = ${colors.primary-dark}
+
+[module/i3]
+type = internal/i3
+format = <label-state> <label-mode>
+index-sort = true
+wrapping-scroll = false
+
+label-active-font = 1
+
+label-mode-padding = 2
+label-mode-foreground = ${colors.background}
+label-mode-background = ${colors.rose}
+
+; focused = Active workspace on focused monitor
+label-focused = %index%
+label-focused-background = ${colors.background}
+label-focused-underline = ${colors.primary}
+label-focused-padding = 2
+
+; unfocused = Inactive workspace on any monitor
+label-unfocused = %index%
+label-unfocused-padding = 2
+label-unfocused-foreground = ${colors.disabled}
+
+; visible = Active workspace on unfocused monitor
+label-visible = %index%
+label-visible-underline = ${colors.amber-dark}
+label-visible-padding = 2
+
+; urgent = Workspace with urgency hint set
+label-urgent = %index%
+label-urgent-underline = ${colors.alert}
+label-urgent-padding = 2
+
+[module/spotify]
+type = custom/script
+interval = 1
+format-prefix = " "
+format-prefix-foreground = ${colors.primary}
+format = <label>
+exec = python ~/.config/polybar/scripts/spotify_status.py -f '{artist}: {song}'
+format-underline = ${colors.primary}
+click-left = playerctl --player=spotify play-pause
+click-right = playerctl --player=spotify next
+click-middle = playerctl --player=spotify previous
+
+[module/cpu]
+type = internal/cpu
+interval = 1
+
+format = <label><ramp-load>
+label = %percentage:2%%
+label-font = 2
+ramp-load-padding = 0
+label-padding = 1
+
+ramp-load-0 = 
+ramp-load-0-foreground = ${colors.primary-dark}
+ramp-load-1 = 
+ramp-load-1-foreground = ${colors.primary-dark}
+ramp-load-2 = 
+ramp-load-2-foreground = ${colors.primary-dark}
+ramp-load-3 = 
+ramp-load-3-foreground = ${colors.primary-dark}
+ramp-load-4 = 
+ramp-load-4-foreground = ${colors.primary-dark}
+ramp-load-5 = 
+ramp-load-5-foreground = ${colors.primary-dark}
+ramp-load-6 = 
+ramp-load-6-foreground = ${colors.primary-dark}
+ramp-load-7 = 
+ramp-load-7-foreground = ${colors.amber-dark}
+ramp-load-8 = 
+ramp-load-8-foreground = ${colors.amber}
+ramp-load-9 = 
+ramp-load-9-foreground = ${colors.warning}
+ramp-load-10 = 
+ramp-load-10-foreground = ${colors.alert}
+
+click-left = alacritty -e htop &
+
+[module/show-desktop]
+type = custom/text
+content = desktop
+content-foreground = ${colors.lavender}
+click-left = i3-msg workspace 25:Desktop
+
+[module/memory]
+type = internal/memory
+interval = 3
+
+format = <ramp-used><label>
+label = %percentage_used%%
+ramp-used-padding = 0
+label-padding = 1
+label-font = 2
+label-foreground = ${colors.foreground}
+
+ramp-used-0 = 
+ramp-used-0-foreground = ${colors.primary-dark}
+ramp-used-1 = 
+ramp-used-1-foreground = ${colors.primary-dark}
+ramp-used-2 = 
+ramp-used-2-foreground = ${colors.primary-dark}
+ramp-used-3 = 
+ramp-used-3-foreground = ${colors.primary-dark}
+ramp-used-4 = 
+ramp-used-4-foreground = ${colors.primary-dark}
+ramp-used-5 = 
+ramp-used-5-foreground = ${colors.primary-dark}
+ramp-used-6 = 
+ramp-used-6-foreground = ${colors.primary-dark}
+ramp-used-7 = 
+ramp-used-7-foreground = ${colors.amber-dark}
+ramp-used-8 = 
+ramp-used-8-foreground = ${colors.amber}
+ramp-used-9 = 
+ramp-used-9-foreground = ${colors.warning}
+ramp-used-10 = 
+ramp-used-10-foreground = ${colors.alert}
+
+click-left = alacritty -e bpytop &
+
+[module/github]
+type = internal/github
+token = ${file:~/.config/polybar/github.token}
+user = rgutzen
+api-url = https://hub.example.org/api/v3/
+empty-notifications = false
+interval = 10
+
+format = <label>
+label =   %notifications%
+label-offline = 
+label-offline-foreground = ${colors.success}
+
+[module/filesystem-icon]
+type = internal/fs
+mount-0 = /
+interval = 10
+fixed-values = true
+
+format-mounted = <label-mounted>
+label-mounted =  
+format-warn = <label-warn>
+label-warn =  
+label-mounted-font = 2
+label-mounted-foreground = ${colors.teal-dark}
+label-warn-foreground = ${colors.warning}
+
+warn-percentage = 5
+
+click-left = baobab
+
+
+[module/filesystem]
+type = internal/fs
+mount-0 = /
+interval = 10
+fixed-values = true
+
+format-mounted = <label-mounted>
+label-mounted = %percentage_free%%
+label-mounted-font = 2
+label-mounted-foreground = ${colors.foreground}
+warn-percentage = 5
+
+click-left = baobab
+
+
+[module/vpn-status]
+type = custom/script
+exec = echo vpn
+exec-if = nmcli -t connection show --active | awk -F ':' '/tun0/{vpn="On"} /vpn/{name=$1} END{if(vpn) printf("%s %s", name, vpn)}'
+interval = 5
+format-foreground = ${colors.special}
+
+click-left = nm-connection-editor
+
+[module/network-connection-icon]
+type = internal/network
+interface = wlp59s0
+interval = 3
+
+format-connected = <label-connected>
+label-connected = 
+label-connected-foreground = ${colors.primary-dark}
+label-connected-font = 2
+
+click-left = nm-connection-editor
+
+[module/network-connection]
+type = internal/network
+interface = wlp59s0
+interval = 3
+
+format-connected = <label-connected>
+label-connected = %signal:3% MBit/s
+label-connected-foreground = ${colors.foreground}
+label-connected-font = 2
+
+click-left = nm-connection-editor
+
+[module/network-upload-icon]
+type = internal/network
+interface = wlp59s0
+interval = 3
+
+format-connected = <label-connected>
+label-connected = 
+label-connected-foreground = ${colors.primary-dark}
+label-connected-font = 2
+
+[module/network-upload]
+type = internal/network
+interface = wlp59s0
+interval = 3
+
+format-connected = <label-connected>
+label-connected = %upspeed:8%
+label-connected-foreground = ${colors.foreground}
+label-connected-font = 2
+
+[module/network-download-icon]
+type = internal/network
+interface = wlp59s0
+interval = 3
+
+format-connected = <label-connected>
+label-connected = 
+label-connected-foreground = ${colors.primary-dark}
+label-connected-font = 2
+
+[module/network-download]
+type = internal/network
+interface = wlp59s0
+interval = 3
+
+format-connected = <label-connected>
+label-connected = %downspeed:8%
+label-connected-foreground = ${colors.foreground}
+label-connected-font = 2
+
+[module/temperature]
+type = internal/temperature
+thermal-zone = 0
+base-temperature = 20
+warn-temperature = 70
+
+; Format
+format = <ramp> <label>
+label = %temperature-c%
+label-font = 2
+ramp-padding = 1
+ramp-0 = 
+ramp-0-foreground = ${colors.lavender-dark}
+ramp-1 = 
+ramp-1-foreground = ${colors.primary-dark}
+ramp-2 = 
+ramp-2-foreground = ${colors.primary}
+ramp-3 = 
+ramp-3-foreground = ${colors.amber-dark}
+ramp-4 = 
+ramp-4-foreground = ${colors.warning}
+
+format-warn = <label-warn>
+label-warn =  %temperature-c%
+label-warn-font = 2
+label-warn-padding = 2
+label-warn-foreground = ${colors.alert}
+
+click-left = alacritty -e watch sensors &
+
+[module/pulseaudio]
+type = internal/pulseaudio
+format-volume = <ramp-volume><label-volume>
+label-volume = %percentage%%
+label-volume-font = 2
+label-volume-foreground = ${colors.foreground}
+
+label-muted = 
+label-muted-foreground = ${colors.disabled}
+
+ramp-volume-0 = 
+ramp-volume-0-foreground = ${colors.primary-dark}
+ramp-volume-1 = 
+ramp-volume-1-foreground = ${colors.primary}
+ramp-volume-2 = 
+ramp-volume-2-foreground = ${colors.primary-light}
+ramp-volume-padding = 2
+
+click-right = blueman-manager
+
+[module/date-icon]
+type = custom/text
+content = 
+label = %content%
+content-font = 2
+content-foreground = ${colors.primary-dark}
+
+[module/date]
+type = internal/date
+interval = 1.0
+date = %H:%M
+date-alt = %d %b %Y
+
+format = <label>
+label = %date%
+label-margin = 0
+label-active-font = 2
+label-font = 2
+label-foreground = ${colors.foreground}
+
+
+[module/battery]
+type = internal/battery
+full-at = 99
+time-format = %H:%M
+battery = ${config.battery-bat}
+adapter = ${config.battery-adp}
+label-active-font = 2
+
+format-charging = <label-charging>
+label-charging =  %percentage:2%%
+label-charging-foreground = ${colors.primary-light}
+
+format-discharging = <ramp-capacity> <label-discharging>
+label-discharging = %percentage:2%%
+label-discharging-foreground = ${colors.foreground}
+
+ramp-capacity-0 = 
+ramp-capacity-0-foreground = ${colors.alert}
+ramp-capacity-1 = 
+ramp-capacity-1-foreground = ${colors.warning}
+ramp-capacity-2 = 
+ramp-capacity-2-foreground = ${colors.amber-dark}
+ramp-capacity-3 = 
+ramp-capacity-3-foreground = ${colors.primary}
+ramp-capacity-4 = 
+ramp-capacity-4-foreground = ${colors.primary-dark}
+
+label-full = 
+label-full-foreground = ${colors.primary-dark}
+
+click-left = xfce4-power-manager-settings &
+
+[module/control-center]
+type = custom/text
+content = 
+click-left = gnome-control-center
+label = %content%
+label-padding = 1
+content-foreground = ${colors.disabled}
+
+
+[module/space]
+type = custom/text
+content = _
+click-left = gnome-control-center
+label = %content%
+label-padding = 0
+content-foreground = ${colors.background}

@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────────────
+# DENY-LIST — this repo is PUBLIC.
+# Deny by default is deliberate: leaking a secret should require actively
+# defeating this file, not merely forgetting to add something.
+# ─────────────────────────────────────────────────────────────────────
+
+# keys & certificates
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.gpg
+*.asc
+known_hosts
+
+# credential stores
+.netrc
+rclone.conf
+hosts.yml
+credentials
+.npmrc
+.pypirc
+.docker/config.json
+.claude.json
+*.1pux
+.aws/
+.gnupg/
+.ssh/
+
+# machine-local / secret-bearing overrides (see secrets.example/)
+local.sh
+secrets.env
+*.local
+
+# environments
+.env
+.env.*
+!.env.example
+
+# noise
+*.swp
+*~
+.DS_Store
+
+# token files (polybar github notifier etc.) — value lives outside git,
+# referenced from configs via ${file:~/.config/polybar/github.token}
+*.token
+github.token

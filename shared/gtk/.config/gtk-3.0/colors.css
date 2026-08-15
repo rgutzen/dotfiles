@@ -1,0 +1,16 @@
+/*
+Base16 Thrifted Rug
+Scheme author: Robin Gutzen (https://github.com/rgutzen)
+Template author: Tinted Theming (https://github.com/tinted-theming)
+In files gtk-3.0/gtk.css and gtk-3.20/gtk.css, delete section "Default color scheme" and inject this
+*/
+
+@define-color bg_color #1a1614;
+@define-color fg_color #dbd7d2;
+@define-color base_color #231e1c;
+@define-color text_color #dbd7d2;
+@define-color text_color_disabled #7c7570;
+@define-color selected_bg_color #2c2522;
+@define-color selected_fg_color #dbd7d2;
+@define-color tooltip_bg_color #1a1614;
+@define-color tooltip_fg_color #dbd7d2;

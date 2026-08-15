@@ -1,0 +1,6 @@
+# ~/.config/git/local — machine-local git identity. NEVER committed.
+[user]
+    email = you@example.com
+    name  = Your Name
+# [user]
+#     signingkey = <gpg key id>
