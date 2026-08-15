@@ -1,0 +1,145 @@
+; vim:ft=dosini
+
+[module/workspace-name]
+type = internal/i3
+strip-wsnumbers = false
+
+format = <label-state>
+
+label-focused = %name%
+label-focused-padding = 2
+label-focused-foreground = ${colors.nord7}
+label-focused-underline = ${colors.nord7}
+
+label-unfocused =
+
+label-urgent = %name%
+label-urgent-foreground = ${colors.urgent}
+label-urgent-background = ${colors.foreground}
+label-urgent-padding = 2
+
+[module/title]
+type = internal/xwindow
+format-foreground = ${colors.nord7}
+format-underline = ${colors.nord7}
+format-padding = 4
+
+label-maxlen = 20
+label-empty = Desktop
+
+
+[module/keyboard]
+type = internal/xkeyboard
+
+; List of indicators to ignore
+bufferlist-0 = num lock
+bufferlist-1 = scroll lock
+
+; Format
+format = <label-indicator>
+
+label-indicator-on-capslock =  CL
+label-indicator-on-capslock-foreground = ${colors.warning}
+label-indicator-on-capslock-underline = ${colors.warning}
+
+; Icons
+layout-icon-default =
+
+
+[module/backlight]
+type = internal/xbacklight
+
+enable-scroll = true
+
+; Format
+format = <ramp> <label>
+format-underline = ${colors.nord9}
+
+ramp-0 =
+
+label = %{A1:$HOME/.config/polybar/scripts/toggle-redshift.sh:}%percentage%%%{A}
+ramp-foreground = ${colors.nord9}
+
+[module/mpd]
+type = internal/mpd
+
+host = ${config.mpd-host}
+port = ${config.mpd-port}
+
+; Format
+format-online = <toggle> <icon-prev> <label-song> <icon-next> <icon-stop> | <bar-progress> | <icon-repeat> <icon-random>
+format-paused = <toggle> <icon-prev> <label-song> <icon-next> <icon-stop>
+format-stopped =  <toggle>
+
+label-song-underline = ${colors.nord8}
+label-song = %artist:0:10:...% - %title:0:10:...%
+
+icon-play =
+icon-play-foreground = ${colors.success}
+icon-play-margin = 1
+icon-pause =
+icon-pause-foreground = ${colors.warning}
+icon-pause-margin = 1
+icon-stop =
+icon-stop-foreground = ${colors.urgent}
+icon-stop-margin = 1
+icon-prev =
+icon-prev-foreground = ${colors.function}
+icon-prev-margin = 1
+icon-next =
+icon-next-foreground = ${colors.function}
+icon-next-margin = 1
+icon-repeat =
+icon-repeat-margin = 1
+icon-random =
+icon-random-margin = 1
+
+toggle-on-foreground = ${colors.success}
+toggle-off-foreground = ${colors.urgent}
+
+bar-progress-width = 20
+bar-progress-indicator = |
+bar-progress-fill = -
+bar-progress-empty = -
+bar-progress-gradient = true
+bar-progress-foreground-0 = ${colors.nord7}
+bar-progress-foreground-1 = ${colors.nord8}
+bar-progress-foreground-2 = ${colors.nord9}
+
+[module/notify]
+type = custom/text
+content =
+content-foreground = ${colors.warning}
+content-underline = ${colors.warning}
+content-padding = 1
+
+click-left = ${config.notify-click-left}
+
+[module/network-short]
+type = internal/network
+interface = ${config.interface}
+
+interval = 1
+
+format-connected = %{A1:networkmanager_dmenu:}<ramp-signal>%{A}
+format-disconnected = %{A1:networkmanager_dmenu:}<label-disconnected>%{A}
+
+label-disconnected =
+label-disconnected-foreground = ${colors.urgent}
+
+ramp-signal-0 =
+ramp-signal-1 =
+ramp-signal-2 =
+ramp-signal-3 =
+
+ramp-signal-0-foreground = ${colors.urgent}
+ramp-signal-0-underline = ${colors.urgent}
+
+ramp-signal-1-foreground = ${colors.notify}
+ramp-signal-1-underline = ${colors.notify}
+
+ramp-signal-2-foreground = ${colors.nord7}
+ramp-signal-2-underline = ${colors.nord7}
+
+ramp-signal-3-foreground = ${colors.success}
+ramp-signal-3-underline = ${colors.success}

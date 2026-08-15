@@ -1,0 +1,43 @@
+system: "base24"
+name: "Thrifted Rug"
+author: "Robin Gutzen (https://github.com/rgutzen)"
+description: "A warm, earthy dark theme with subtle richness and natural accent colors, inspired by the calming, whimsical patterns of a well-loved vintage rug. Built for long working sessions: reduced eye strain while keeping visual interest."
+variant: "dark"
+# Slot semantics: https://github.com/tinted-theming/base24/blob/main/styling.md
+#
+# Mapping notes — this palette is organised as 5 accent FAMILIES x 3 shades
+# (deep / primary / light). base24 has slots for the primary and light shades
+# (normal + bright ANSI); the DEEP shades have no base24 slot and live in
+# ../palette-extended.env for use by custom templates.
+palette:
+  # --- neutrals: dark -> light -------------------------------------------
+  base00: "#1a1614"  # Default Background            <- Background (very dark off-black, reddish warmth)
+  base01: "#231e1c"  # Lighter Background            <- Background Alt
+  base02: "#2c2522"  # Selection Background          <- Surface (warm dark gray, red undertones)
+  base03: "#7c7570"  # Comments, Invisibles          <- Disabled Text (muted warm gray)
+  base04: "#bdb7b1"  # Dark Foreground (status bars) <- Secondary Text (light taupe)
+  base05: "#dbd7d2"  # Default Foreground            <- Primary Text (muted warm off-white)
+  base06: "#e8e5e2"  # Light Foreground              <- derived: base05 mixed 35% toward white
+  base07: "#f4f3f2"  # Lightest Foreground           <- derived: base05 mixed 70% toward white
+
+  # --- normal ANSI accents (family PRIMARY / DEEP shades) ----------------
+  base08: "#c67676"  # ANSI 1  Red      <- Error (soft red)
+  base09: "#b3894f"  # ANSI 16 Orange   <- Deep Gold (rich golden brown)
+  base0A: "#d4a373"  # ANSI 3  Yellow   <- Soft Amber (warm caramel) / Warning
+  base0B: "#8fb573"  # ANSI 2  Green    <- Primary Green (muted sage)
+  base0C: "#76b0a6"  # ANSI 6  Cyan     <- Soft Teal (muted turquoise) / Success
+  base0D: "#8a98c6"  # ANSI 4  Blue     <- Soft Lavender (muted periwinkle) / Info
+  base0E: "#b77e99"  # ANSI 5  Magenta  <- Rose Purple (muted rose)
+  base0F: "#a37d63"  # ANSI 17 Brown    <- Special/Debug (neutral brown)
+
+  # --- extra backgrounds: darker than base00 ------------------------------
+  base10: "#110e0d"  # Darker Background             <- derived: base00 mixed 35% toward black
+  base11: "#090807"  # Darkest Background            <- derived: base00 mixed 65% toward black
+
+  # --- bright ANSI accents (family LIGHT shades) --------------------------
+  base12: "#d79f9f"  # ANSI 9  Bright Red     <- derived: base08 mixed 30% toward white
+  base13: "#e8c196"  # ANSI 11 Bright Yellow  <- Light Amber (soft pastel peach)
+  base14: "#a8c498"  # ANSI 10 Bright Green   <- Light Green (soft pastel sage)
+  base15: "#9accc4"  # ANSI 14 Bright Cyan    <- Light Teal (soft pastel mint)
+  base16: "#abb5d9"  # ANSI 12 Bright Blue    <- Light Lavender (soft pastel blue)
+  base17: "#d2a2b6"  # ANSI 13 Bright Magenta <- Light Rose (soft pastel pink)
