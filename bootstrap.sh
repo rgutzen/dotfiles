@@ -24,7 +24,7 @@ command -v stow >/dev/null || {
     exit 1
 }
 
-SHARED=(bash git conda gtk)
+SHARED=(bash git conda gtk systemd)
 case "${XDG_SESSION_TYPE:-x11}" in
     wayland) SESSION=wayland; PKGS=(hypr waybar) ;;
     *)       SESSION=x11;     PKGS=(i3 polybar autorandr wm-scripts) ;;
@@ -82,6 +82,18 @@ if command -v tinted-builder-rust >/dev/null; then
 else
     echo "  ! tinted-builder-rust missing — run: cargo install tinted-builder-rust --locked"
     echo "    then: ./shared/theme/apply-theme.sh"
+fi
+
+# ── systemd user timers ──────────────────────────────────────────────────
+if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; then
+    echo
+    echo "── timers ──"
+    systemctl --user daemon-reload
+    for t in pazras-backup pazras-sync pazras-verify pazras-prune pazras-validate pazras-mirror; do
+        systemctl --user enable --now "$t.timer" >/dev/null 2>&1 && echo "  ✓ $t.timer"
+    done
+    systemctl --user enable --now pazras-archive-flush.path >/dev/null 2>&1 \
+        && echo "  ✓ pazras-archive-flush.path (fires on disk attach)"
 fi
 
 echo

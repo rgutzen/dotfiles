@@ -1,0 +1,11 @@
+[Unit]
+Description=Push restic repo deltas to Proton and BigFish
+After=pazras-backup.service
+OnFailure=pazras-notify@%n.service
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/06_SYSTEM/scripts/para-system-manager.sh backup sync
+Nice=15
+IOSchedulingClass=idle

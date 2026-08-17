@@ -1,0 +1,16 @@
+[Unit]
+Description=PAZRAS restic backup
+Documentation=file:%h/06_SYSTEM/DATA-ARCHITECTURE.md
+OnFailure=pazras-notify@%n.service
+
+[Service]
+Type=oneshot
+# Full PATH: a systemd unit does not inherit an interactive shell's PATH.
+# (zstd resolving only inside miniforge3 is exactly this class of bug.)
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/06_SYSTEM/scripts/para-system-manager.sh backup
+# restic returns 3 for "completed, some files unreadable" — a warning, not a
+# failure. Treat it as success so it does not trip OnFailure, but it is logged.
+SuccessExitStatus=0 3
+Nice=10
+IOSchedulingClass=idle

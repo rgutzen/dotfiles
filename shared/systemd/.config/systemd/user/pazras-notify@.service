@@ -1,0 +1,19 @@
+# OnFailure handler for every PAZRAS unit.
+#
+# Finding #1 was not a bad backup tool — it was a backup that silently never
+# ran and nothing said so. Automation without failure surfacing does not
+# reduce risk, it hides it: you stop checking because you assume it is handled.
+#
+# Writes a status file (readable without a GUI, e.g. from a status bar) AND
+# raises a desktop notification when a session is present.
+[Unit]
+Description=Report failure of %i
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c '\
+  mkdir -p "$HOME/05_ARCHIVES/Logs"; \
+  printf "FAILED %%s %%s\\n" "%i" "$(date -Is)" >> "$HOME/05_ARCHIVES/Logs/pazras-failures.log"; \
+  printf "FAIL %%s %%s" "%i" "$(date -Is)" > "$HOME/.cache/pazras-status"; \
+  command -v notify-send >/dev/null && \
+    notify-send -u critical "PAZRAS: %i failed" "see ~/05_ARCHIVES/Logs/" || true'

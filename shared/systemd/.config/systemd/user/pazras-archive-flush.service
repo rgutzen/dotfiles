@@ -1,0 +1,9 @@
+[Unit]
+Description=Flush 05_ARCHIVES staging to 05_ARCHIVES-EXTERNAL on BigFish
+OnFailure=pazras-notify@%n.service
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/06_SYSTEM/scripts/archive-flush.sh
+Nice=19
+IOSchedulingClass=idle
