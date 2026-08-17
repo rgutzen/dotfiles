@@ -27,7 +27,7 @@ command -v stow >/dev/null || {
 SHARED=(bash git conda gtk)
 case "${XDG_SESSION_TYPE:-x11}" in
     wayland) SESSION=wayland; PKGS=(hypr waybar) ;;
-    *)       SESSION=x11;     PKGS=(i3 polybar autorandr) ;;
+    *)       SESSION=x11;     PKGS=(i3 polybar autorandr wm-scripts) ;;
 esac
 
 echo "▸ dotfiles: $DOTFILES"
@@ -49,15 +49,24 @@ else
     echo "  (no populated packages for $SESSION yet)"
 fi
 
+# ── OS tier ───────────────────────────────────────────────────────────────
+# Ubuntu-only maintenance scripts (apt/snap). Skipped on Arch/Omarchy, where
+# they would not run anyway.
+if [[ -f /etc/debian_version && -d "$DOTFILES/ubuntu" ]]; then
+    echo "── ubuntu ──"
+    stow "${STOW_ARGS[@]}" -t "$HOME" -d "$DOTFILES/ubuntu" os-scripts && echo "  ✓ os-scripts"
+fi
+
 [[ "$MODE" == "--delete" || "$MODE" == "--dry-run" ]] && exit 0
 
 # ── machine-local overrides (never tracked) ──────────────────────────────
 echo
 echo "── local overrides ──"
 mkdir -p "$HOME/.config/bash" "$HOME/.config/git"
-for f in bash/local.sh git/local; do
+for f in bash/local.sh:local.sh git/local:git; do
+    tpl="${f#*:}"; f="${f%%:*}"
     if [[ ! -f "$HOME/.config/$f" ]]; then
-        cp "$DOTFILES/secrets.example/$(basename "$f")" "$HOME/.config/$f" 2>/dev/null \
+        cp "$DOTFILES/secrets.example/$tpl" "$HOME/.config/$f" 2>/dev/null \
             && echo "  + created ~/.config/$f from template — fill in from Proton Pass" \
             || echo "  ! no template for $f"
     else
