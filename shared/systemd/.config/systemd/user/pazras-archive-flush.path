@@ -1,0 +1,6 @@
+[Unit]
+Description=Watch for BigFish so archives can be flushed
+[Path]
+DirectoryNotEmpty=/media/rgutzen/BigFish/05_ARCHIVES-EXTERNAL
+[Install]
+WantedBy=default.target

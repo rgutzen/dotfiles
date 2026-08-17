@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily off-site sync of restic repos
+
+[Timer]
+# Single OnCalendar: multiple entries are ADDITIVE in systemd, not overriding.
+# 04:30 leaves the backup (00:00 + jitter) time to finish first.
+OnCalendar=*-*-* 04:30
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target
