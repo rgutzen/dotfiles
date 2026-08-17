@@ -1,0 +1,7 @@
+[Unit]
+Description=Weekly Proton mirror publish
+[Timer]
+OnCalendar=Sat 02:00
+Persistent=true
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=PAZRAS restic retention and prune
+OnFailure=pazras-notify@%n.service
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/06_SYSTEM/scripts/para-system-manager.sh backup prune
+Nice=19
+IOSchedulingClass=idle

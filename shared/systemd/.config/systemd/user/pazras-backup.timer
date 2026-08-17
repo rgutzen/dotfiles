@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily PAZRAS backup
+
+[Timer]
+OnCalendar=daily
+# THE decisive flag for a laptop: run the job late if the machine was asleep.
+# cron would simply skip it and say nothing.
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target
