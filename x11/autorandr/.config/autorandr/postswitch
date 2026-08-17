@@ -4,6 +4,6 @@ sh ~/.fehbg
 
 killall polybar
 sleep 1
-source ~/scripts/launch_polybar.sh
+launch_polybar.sh
 
 notify-send -i display "Display profile" "$AUTORANDR_CURRENT_PROFILE"
