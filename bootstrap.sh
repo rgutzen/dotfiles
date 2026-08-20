@@ -92,8 +92,18 @@ if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; the
     for t in pazras-backup pazras-sync pazras-verify pazras-prune pazras-validate pazras-mirror; do
         systemctl --user enable --now "$t.timer" >/dev/null 2>&1 && echo "  ✓ $t.timer"
     done
-    systemctl --user enable --now pazras-archive-flush.path >/dev/null 2>&1 \
-        && echo "  ✓ pazras-archive-flush.path (fires on disk attach)"
+    # pazras-archive-flush.path is deliberately NOT enabled. The flush moves
+    # data out of 05_ARCHIVES onto BigFish, where 05_ARCHIVES-EXTERNAL is still
+    # single-copy (the archives-external restic repo waits on Disk B). An
+    # automatic trigger means that move happens unattended and unreviewed;
+    # until there is a second copy, run it deliberately instead:
+    #
+    #     systemctl --user start pazras-archive-flush.service
+    #
+    # To restore the automatic behaviour:
+    #     systemctl --user enable --now pazras-archive-flush.path
+    systemctl --user is-enabled pazras-archive-flush.path >/dev/null 2>&1 \
+        && echo "  ! pazras-archive-flush.path is enabled (expected: manual only)"
 fi
 
 echo

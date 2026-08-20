@@ -1,6 +1,30 @@
 [Unit]
-Description=Watch for BigFish so archives can be flushed
+Description=Flush archive staging when there is something to flush
+#
+# SUSPENDED 2026-08-20 — deployed but intentionally NOT enabled.
+# The flush MOVES data out of 05_ARCHIVES onto BigFish (rsync
+# --remove-source-files), and 05_ARCHIVES-EXTERNAL there is still single-copy
+# until the archives-external restic repo exists on Disk B. A one-way move that
+# lands in an unbacked location should be a decision, not a side effect of
+# plugging in a disk.
+#
+#   run manually:  systemctl --user start pazras-archive-flush.service
+#   re-automate:   systemctl --user enable --now pazras-archive-flush.path
+
 [Path]
-DirectoryNotEmpty=/media/rgutzen/BigFish/05_ARCHIVES-EXTERNAL
+# Watch the SOURCE (staging awaiting flush), not the destination.
+#
+# The first version watched DirectoryNotEmpty on BigFish's archive dir — which
+# is permanently non-empty, so the unit re-triggered continuously, running the
+# flush in a tight loop. A path unit fires whenever its condition HOLDS, not
+# when it changes: point it at a directory that is normally EMPTY.
+#
+# 05_ARCHIVES staging is empty between flushes by design, so this fires only
+# when there is genuine work. The service itself refuses to run if BigFish is
+# absent, so a laptop-only trigger is safe.
+DirectoryNotEmpty=%h/05_ARCHIVES/Projects
+DirectoryNotEmpty=%h/05_ARCHIVES/Areas
+DirectoryNotEmpty=%h/05_ARCHIVES/Resources
+
 [Install]
 WantedBy=default.target
