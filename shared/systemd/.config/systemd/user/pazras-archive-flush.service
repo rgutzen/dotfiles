@@ -1,5 +1,9 @@
 [Unit]
 Description=Flush 05_ARCHIVES staging to 05_ARCHIVES-EXTERNAL on BigFish
+# Belt and braces after the re-trigger loop: even if a path condition holds
+# permanently again, systemd stops it after 3 starts in 10 minutes.
+StartLimitIntervalSec=600
+StartLimitBurst=3
 OnFailure=pazras-notify@%n.service
 [Service]
 Type=oneshot
