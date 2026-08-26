@@ -119,10 +119,11 @@ fi
 
 # Disable CapsLock
 # xmodmap -e "remove lock = Caps_Lock"
-setxkbmap -option caps:escape
+command -v setxkbmap >/dev/null && [ "${XDG_SESSION_TYPE:-x11}" != wayland ] \
+    && setxkbmap -option caps:escape
 
 
-export PATH="$PATH:/home/rgutzen/06_SYSTEM/scripts/"
+export PATH="$PATH:$HOME/06_SYSTEM/scripts/"
 
 export PATH="$PATH:/home/linuxbrew/.linuxbrew/bin"
 
@@ -132,42 +133,41 @@ export PATH="$PATH:/usr/local/texlive/2022/bin/x86_64-linux"
 
 # Aliases
 # alias local-jekyll='bundle exec jekyll serve --config _config.yml'
-source ~/06_SYSTEM/scripts/para-aliases.sh
+[ -f ~/06_SYSTEM/scripts/para-aliases.sh ] && . ~/06_SYSTEM/scripts/para-aliases.sh
 
-eval "$(starship init bash)"
+command -v starship >/dev/null && eval "$(starship init bash)"
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/home/rgutzen/miniforge3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+__conda_setup="$("$HOME/miniforge3/bin/conda" 'shell.bash' 'hook' 2> /dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__conda_setup"
 else
-    if [ -f "/home/rgutzen/miniforge3/etc/profile.d/conda.sh" ]; then
-        . "/home/rgutzen/miniforge3/etc/profile.d/conda.sh"
+    if [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
+        . "$HOME/miniforge3/etc/profile.d/conda.sh"
     else
-        export PATH="/home/rgutzen/miniforge3/bin:$PATH"
+        export PATH="$HOME/miniforge3/bin:$PATH"
     fi
 fi
 unset __conda_setup
 
-if [ -f "/home/rgutzen/miniforge3/etc/profile.d/mamba.sh" ]; then
-    . "/home/rgutzen/miniforge3/etc/profile.d/mamba.sh"
+if [ -f "$HOME/miniforge3/etc/profile.d/mamba.sh" ]; then
+    . "$HOME/miniforge3/etc/profile.d/mamba.sh"
 fi
 # <<< conda initialize <<<
-
-source ~/06_SYSTEM/scripts/para-aliases.sh
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-. "$HOME/.cargo/env"
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
 # opencode
-export PATH=/home/rgutzen/.opencode/bin:$PATH
+export PATH="$HOME/.opencode/bin:$PATH"
 export OPENCODE_DISABLE_EXTERNAL_SKILLS=1
 
 # OpenClaw Completion
-source "/home/rgutzen/.openclaw/completions/openclaw.bash"
+[ -f "$HOME/.openclaw/completions/openclaw.bash" ] \
+    && . "$HOME/.openclaw/completions/openclaw.bash"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
@@ -177,6 +177,11 @@ export PATH="$HOME/go/bin:$PATH"
 # >>> oh-my-opencode-slim background subagents >>>
 export OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true
 # <<< oh-my-opencode-slim background subagents <<<
+
+# Omarchy ships its own bash defaults and its updater owns them. Source them
+# if present rather than forking a copy into this repo; the guard makes this a
+# no-op everywhere else. Placed before the local overrides so ours win.
+[ -f ~/.local/share/omarchy/default/bash/rc ] && . ~/.local/share/omarchy/default/bash/rc
 
 # machine-local overrides & secrets (untracked; see dotfiles/secrets.example/)
 [ -f ~/.config/bash/local.sh ] && . ~/.config/bash/local.sh
