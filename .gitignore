@@ -40,6 +40,11 @@ secrets.env
 .env.*
 !.env.example
 
+# GTK file-chooser state — machine-local, and it names home-dir layout,
+# internal hostnames and remote usernames. Lives in $HOME and in backups only.
+**/gtk-3.0/bookmarks
+**/gtk-3.0/servers
+
 # noise
 *.swp
 *~

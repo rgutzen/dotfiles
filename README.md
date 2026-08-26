@@ -3,15 +3,81 @@
 Configuration for a P.A.Z.R.A.S workflow, managed with [GNU Stow](https://www.gnu.org/software/stow/).
 Currently spans **X280** (Ubuntu 22.04 · i3 · X11) and **Omarchy** (Arch · Hyprland · Wayland).
 
-## Quick start
+## Deploying
+
+`bootstrap.sh` is idempotent — re-run it any time. Which path you take depends on
+whether the machine already has configs of its own.
+
+### On a fresh machine
 
 ```bash
-git clone https://github.com/rgutzen/dotfiles ~/02_AREAS/B_Tech/dotfiles
+sudo pacman -S stow          # Arch/Omarchy   (Debian/Ubuntu: sudo apt install stow)
+git clone git@github.com:rgutzen/dotfiles ~/02_AREAS/B_Tech/dotfiles
 cd ~/02_AREAS/B_Tech/dotfiles
-./bootstrap.sh
+
+./bootstrap.sh --dry-run     # 1. see what would be linked, change nothing
+./bootstrap.sh               # 2. link it
 ```
 
-Then fill in `~/.config/bash/local.sh` and `~/.config/git/local` from your password manager.
+Then, in order:
+
+1. **Fill in the local overrides.** `bootstrap.sh` seeds `~/.config/bash/local.sh`
+   and `~/.config/git/local` from `secrets.example/`; the values come from Proton
+   Pass. Nothing else in this repo is machine-specific.
+2. **Install the theme builder** if it warned about one:
+   `cargo install tinted-builder-rust --locked && ./shared/theme/apply-theme.sh`
+3. **Set up the AI harnesses** — see [`shared/ai/README.md`](shared/ai/README.md).
+   Plugins reinstall themselves from the manifest; the accounts need fresh logins.
+4. **Open a new shell.** `.bashrc` is only read at shell start, so the previous
+   shell still has the old environment.
+
+### On a machine that already has configs
+
+A fresh OS install ships its own `~/.bashrc`, and Claude Code or OpenCode will have
+written their own configs on first run. Stow refuses to overwrite a real file, so a
+plain `./bootstrap.sh` aborts with `WARNING! stowing <pkg> would cause conflicts`.
+
+`--adopt` resolves that by **inverting** the conflict: the file already on the
+machine is moved *into* the package and symlinked back, so it lands as an unstaged
+diff and git becomes the merge UI.
+
+```bash
+git status                   # 1. must be clean — --adopt refuses otherwise
+./bootstrap.sh --dry-run     # 2. see which files will collide
+./bootstrap.sh --adopt       # 3. adopt them; stops before the theme/timer steps
+
+git diff                     # 4. everything above is what THIS MACHINE had
+```
+
+Then resolve each file, in whatever mix the diff calls for:
+
+| Intent | Command |
+|---|---|
+| Keep this repo's version | `git checkout -- <file>` |
+| Keep the new machine's version | leave it — then commit it |
+| Merge the two | `git checkout -p <file>` |
+
+```bash
+./bootstrap.sh               # 5. re-run for the theme and timer steps
+git commit                   # 6. commit whatever you chose to keep
+```
+
+Step 3 deliberately stops early: resolving the diff before applying the theme and
+enabling timers keeps one decision on screen at a time.
+
+**`.bashrc` is the one that usually wants a real merge**, not a keep-or-discard.
+Omarchy's version sources its own defaults, so take *that* hunk and discard the
+rest — or better, keep this repo's file, since it already sources Omarchy's
+defaults behind a guard (see "Distro defaults are sourced, not vendored" below).
+
+### Other modes
+
+```bash
+./bootstrap.sh --delete      # unstow everything; $HOME keeps no links
+```
+
+Removing a file from a package does not remove its link — `./bootstrap.sh` uses
+`--restow` (unstow, then stow), which clears links whose source is gone.
 
 ## Layout
 
@@ -24,14 +90,24 @@ shared/     portable across every machine
   theme/    base24 colour scheme + generator  (see theme/README.md)
   ai/       Claude Code + OpenCode config, curated plugin/skill set  (see ai/README.md)
 
-x11/        X280 — Ubuntu, i3, X11
-  i3/       polybar/       autorandr/
+x11/        session tier — i3, X11
+  i3/       polybar/  autorandr/  wm-scripts/
 
-wayland/    Omarchy — Hyprland (populate on the new machine)
+wayland/    session tier — Hyprland (populate on the new machine)
   hypr/     waybar/
+
+ubuntu/     OS tier — apt/snap maintenance scripts
+arch/       OS tier — pacman/Omarchy equivalents (create when needed)
 
 secrets.example/   templates — names only, never values
 ```
+
+**Session tier and OS tier are separate axes.** `x11/`|`wayland/` is selected by
+`$XDG_SESSION_TYPE`; `ubuntu/`|`arch/` by `/etc/debian_version` or
+`/etc/arch-release`. Omarchy happens to be Arch *and* Wayland, but its pacman
+scripts apply in a bare TTY and Hyprland-on-Ubuntu would want the wayland tier
+with none of them. Collapsing the two would make each machine a special case
+instead of a point in a two-axis grid.
 
 **Directories, not branches.** Machines are *parallel variants that coexist*, not
 divergent history. With directories, a change to shared `.bashrc` is one edit that
@@ -51,8 +127,50 @@ x11/i3/.config/i3/config     →  ~/.config/i3/config
 *is* editing the repo — `git status` shows config drift with nothing to remember and
 no sync step to forget.
 
-`bootstrap.sh` picks packages from `$XDG_SESSION_TYPE`, so one command works on both
-machines. It skips packages that are still empty placeholders.
+`bootstrap.sh` picks packages per tier, so one command works on every machine. It
+skips packages that are still empty placeholders.
+
+### Directories are never folded
+
+Stow's default is *tree folding*: if `~/.config/foo` doesn't exist, it links the
+whole directory in one go and `~/.config/foo` becomes a symlink into this repo.
+Anything the **application** then writes into that directory lands inside git —
+which is exactly how `gtk-3.0/bookmarks` and `servers` ended up committed to this
+public repo (since removed), and how a fresh machine would end up with systemd's
+`timers.target.wants/` symlinks committed. So `bootstrap.sh` passes `--no-folding` everywhere. The cost
+is that a newly added file needs a re-run to appear in `$HOME`; the script is
+idempotent, so just re-run it.
+
+### Why `--adopt` instead of a keep/overwrite prompt
+
+The procedure is under [Deploying](#on-a-machine-that-already-has-configs); this is
+why it works that way. A per-file "keep or overwrite?" prompt is the obvious
+alternative and is worse on both counts:
+
+- **At the moment it fires you cannot see what differs.** `--adopt` turns the
+  conflict into a diff you read at leisure, with the whole set in front of you.
+- **The honest answer is often "merge".** Omarchy's `.bashrc` is not junk to
+  discard, nor a replacement for this one — you want a few hunks out of it. A
+  binary prompt cannot express that; `git checkout -p` can.
+
+The clean-tree check is the entire safety mechanism. `--adopt` really does
+overwrite the repo's copy, and without a clean tree adopted content is
+indistinguishable from your own uncommitted edits.
+
+### Distro defaults are sourced, not vendored
+
+Omarchy ships shell defaults its own updater owns. Copying them into a tier here
+would create a fork you'd have to hand-resync, so `shared/bash/.bashrc` sources
+them behind a guard instead:
+
+```bash
+[ -f ~/.local/share/omarchy/default/bash/rc ] && . ~/.local/share/omarchy/default/bash/rc
+```
+
+Same reasoning as the AI plugins: track the *manifest*, let upstream own the
+payload. Everything else in `.bashrc` is likewise guarded (`starship`, `nvm`,
+`cargo`, `conda`, `setxkbmap`), so one shared file degrades cleanly on a machine
+that has fewer tools installed rather than erroring on every interactive shell.
 
 ## Machine-local values and secrets
 
@@ -63,6 +181,13 @@ that the tracked configs `include`:
 |---|---|
 | `shared/bash/.bashrc` | `~/.config/bash/local.sh` |
 | `shared/git/.gitconfig` | `~/.config/git/local` |
+| — | `~/.config/gtk-3.0/{bookmarks,servers}` |
+
+GTK's file-chooser bookmarks and network locations are deliberately **not** in any
+package. They are machine-local by nature and they name home-directory layout,
+internal hostnames and remote usernames — nothing that belongs in a public repo.
+They live in `$HOME` and in backups; `.gitignore` denies them so a future folded
+directory cannot quietly re-add them.
 
 Templates with dummy values live in `secrets.example/`. Secrets therefore have a
 designated home *outside* git — leaking one requires actively putting it in the

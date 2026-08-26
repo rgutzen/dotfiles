@@ -9,15 +9,41 @@ accumulated over time.
 ```
 .claude/
   settings.json     Claude Code settings: model, hooks, statusline, enabled plugins
-  commands/          Custom slash commands
+  commands/
     rse-mode.md      Research Software Engineer mode — the one custom command
                       that survived the audit (52 uses in history; everything
                       else tried once or never)
+  powerline/
+    claude-powerline.json   Statusline theme (Thrifted Rug colours). Tracked
+                      because settings.json's statusLine command points at it —
+                      an untracked file referenced from a tracked one is a
+                      config that silently degrades on a new machine.
 .config/opencode/
   opencode.json              Core OpenCode config: plugins, model, agent toggles
   oh-my-opencode-slim.json   OMO config: DeepSeek preset, custom skill-specialist
                              agent, disabled agents (designer, council)
 ```
+
+## What is deliberately *not* here
+
+**The plugins themselves.** Everything in the table below is a marketplace
+plugin cloned from GitHub — ~360 MB of upstream git repos under
+`~/.claude/plugins/{cache,marketplaces}/`. The tracked artifact is the
+*manifest*, not the payload: `enabledPlugins` + `extraKnownMarketplaces` in
+`settings.json` is what reinstalls them. Vendoring the payload would fork
+someone else's repo into this one and put `/plugin update` in conflict with the
+working tree — the `package.json` / `node_modules` split, applied to Claude Code.
+
+One consequence worth knowing: `enabledPlugins` records *names, not versions*.
+`~/.claude/plugins/installed_plugins.json` does hold a `gitCommitSha` per
+plugin, but that is machine state, not a lockfile — a new machine gets HEAD of
+each marketplace. Fine for this set; just not a reproducibility guarantee.
+
+**Dippy.** The `PreToolUse` hook points at
+`~/04_RESOURCES/Templates/Dippy/bin/dippy-hook`, which is the entry point of a
+Python package with its own `src/` tree — a program, not a dotfile. The hook
+command is guarded (`[ -x "$D" ] && exec "$D"; exit 0`) so a machine without
+Dippy installed gets a silent no-op rather than an error on every Bash call.
 
 ## Why so few plugins
 
@@ -25,10 +51,20 @@ Claude Code plugins accumulate quietly — installing one is a single command,
 so nothing forces a decision about whether it's worth the surface area.
 Auditing against `history.jsonl` on 2026-08-26 found a 25-command third-party
 framework (`sc:*`, "SuperClaude") with **2 invocations ever**, one of which
-was just its own help command. It's gone. Six more plugins were installed
-but already disabled and unused (`atomic-agents`, `sourcegraph`,
+was just its own help command. It was removed from `enabledPlugins`. Six more were
+installed but already disabled and unused (`atomic-agents`, `sourcegraph`,
 `security-guidance`, `superpowers`, `example-skills`, `huggingface-skills`) —
-also gone.
+also dropped from `enabledPlugins`.
+
+**Dropped ≠ uninstalled.** Removing an entry from `enabledPlugins` stops the
+plugin loading; it does not delete it. On the X280 all seven are still in
+`installed_plugins.json` and still on disk (`atomic-agents` 13M,
+`huggingface-skills` 7.2M, `superpowers` 4.5M, `security-guidance` 932K,
+`coderabbit` 156K, `sourcegraph` 84K), alongside `~/.claude/skills_backup/`
+(184 dirs, 21M) and `~/.claude/plugins_backup/` (95M) from an earlier cleanup.
+Use `/plugin uninstall <name>` to reclaim the space. None of this follows to a
+new machine — Omarchy starts from the manifest and installs only what is
+enabled.
 
 **What's kept, and why each one earns its place:**
 
@@ -78,16 +114,40 @@ portable via git. Re-authenticate fresh on the new machine.
 
 ## Setup on a new machine
 
+Order matters: **install each harness first, then deploy.** Claude Code and
+OpenCode both write a default config on first run, and stow will not overwrite a
+real file — so a deploy that runs before they exist links cleanly, while one that
+runs after needs `./bootstrap.sh --adopt` (see the repo README). Either works;
+knowing which you are in saves a confusing `would cause conflicts` abort.
+
+Nothing here needs the plugins to be copied across — `settings.json` carries the
+manifest and Claude Code reinstalls from it.
+
 ### 1. Claude Code
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash     # or: npm i -g @anthropic-ai/claude-code
 claude                                              # first run walks through login
 ```
-`bootstrap.sh` (run from the dotfiles root) stows this package's
-`.claude/settings.json` and `.claude/commands/` into place. Plugins install
-themselves from `enabledPlugins` the first time Claude Code reads the config;
-if any don't auto-install, `/plugin marketplace add <name>` for each entry
-under `extraKnownMarketplaces` first.
+Then, from the dotfiles root:
+
+```bash
+./bootstrap.sh --dry-run     # ~/.claude/settings.json will collide if claude ran
+./bootstrap.sh               #   ...or --adopt if it did, then resolve the diff
+```
+
+That links `.claude/settings.json`, `.claude/commands/` and
+`.claude/powerline/claude-powerline.json`. Plugins install themselves from
+`enabledPlugins` the next time Claude Code reads the config; if any don't
+auto-install, `/plugin marketplace add <name>` for each entry under
+`extraKnownMarketplaces` first, then restart.
+
+Two things this deploy does *not* bring, both by design:
+
+- **Dippy** (the `PreToolUse` hook) lives in `04_RESOURCES/Templates/`. Its
+  absence is a silent no-op, so the statusline and hooks still work without it —
+  install it separately if you want it back.
+- **Credentials.** `~/.claude/.credentials.json` is not in this repo. Run
+  `claude` and log in.
 
 ### 2. OpenCode
 ```bash
@@ -96,10 +156,18 @@ opencode auth login          # Anthropic, DeepSeek, OpenRouter — whichever you
 ```
 `bootstrap.sh` stows `.config/opencode/opencode.json` and
 `oh-my-opencode-slim.json` into place. OpenCode reads `opencode.json`'s
-`plugin` array and installs `oh-my-opencode-slim` (and the others) on next
-run. Note: that array currently has a bare `"list"` entry that doesn't look
-like a real package name — check whether that's intentional before relying
-on it.
+`plugin` array and installs `oh-my-opencode-slim` (and the others) on next run.
+
+Two things to check on the new machine:
+
+- `opencode.json`'s `plugin` array has a bare `"list"` entry that doesn't look
+  like a real package name — confirm it's intentional before relying on it.
+- `oh-my-opencode-slim.json` sets `acpAgents.hermes.env.PATH` to
+  `$HOME/.local/bin:$HOME/.hermes/bin:...`. If OpenCode passes that env straight
+  to `execve` rather than through a shell, `$HOME` won't expand and `hermes`
+  won't be found. If `@hermes` fails to start, deleting the whole `env` key is
+  the fix — the agent then inherits OpenCode's environment, which already has
+  the right `PATH` from `.bashrc`.
 
 ### 3. Hermes
 Hermes has its own installer and is **not** part of this dotfiles package —

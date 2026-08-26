@@ -1,0 +1,146 @@
+{
+  "theme": "custom",
+  "display": {
+    "padding": 1,
+    "style": "powerline",
+    "charset": "unicode",
+    "colorCompatibility": "auto",
+    "autoWrap": true,
+        "lines": [
+          {
+          "segments": {
+          "version": {
+            "enabled": true
+          },
+          "model": {
+              "enabled": true
+          },
+          "env": {
+            "enabled": false,
+            "variable": "CLAUDE_ACCOUNT",
+            "prefix": ""
+          },
+          "directory": {
+            "enabled": true,
+            "style": "full"
+          },
+          "git": {
+            "enabled": true,
+            "showSha": false,
+            "showWorkingTree": true,
+            "showOperation": true,
+            "showTag": false,
+            "showTimeSinceCommit": true,
+            "showStashCount": false,
+            "showUpstream": false,
+            "showRepoName": false
+          },
+          "session": {
+            "enabled": false,
+            "type": "both",
+            "costSource": "calculated"
+          },
+          "context": {
+            "enabled": true,
+            "showPercentageOnly": true,
+            "displayStyle": "dots",
+            "autocompactBuffer": 33000,
+            "percentageMode": "used"
+          },
+          "today": {
+            "enabled": false,
+            "type": "both"
+          },
+          "block": {
+            "enabled": true,
+            "type": "time",
+            "burnType": "none"
+          },
+          "metrics": {
+            "enabled": true,
+            "showResponseTime": false,
+            "showLastResponseTime": false,
+            "showDuration": true,
+            "showMessageCount": false,
+            "showLinesAdded": false,
+            "showLinesRemoved": false
+          },
+          "tmux": {
+            "enabled": false
+          }
+        }
+      }
+    ]
+  },
+  "colors": {
+    "custom": {
+      "version": {
+        "bg": "#1a1614",
+        "fg": "#bdb7b1"
+      },
+      "model": {
+        "bg": "#5c7c58",
+        "fg": "#2c2522"
+      },
+      "directory": {
+        "bg": "#8fb573",
+        "fg": "#2c2522"
+      },
+      "git": {
+        "bg": "#b3894f",
+        "fg": "#2c2522"
+      },
+      "context": {
+        "bg": "#8e5568",
+        "fg": "#2c2522"
+      },
+      "session": {
+        "bg": "#d4a373",
+        "fg": "#2c2522"
+      },
+      "block": {
+        "bg": "#b77e99",
+        "fg": "#2c2522"
+      },
+      "today": {
+        "bg": "#a37d63",
+        "fg": "#2c2522"
+      },
+      "tmux": {
+        "bg": "#7c7570",
+        "fg": "#2c2522"
+      },
+      "contextWarning": {
+        "bg": "#d4a373",
+        "fg": "#2c2522"
+      },
+      "contextCritical": {
+        "bg": "#c67676",
+        "fg": "#2c2522"
+      },
+      "metrics": {
+        "bg": "#2c2522",
+        "fg": "#bdb7b1"
+      }
+    }
+  },
+  "budget": {
+    "session": {
+      "warningThreshold": 80
+    },
+    "today": {
+      "amount": 5.0,
+      "warningThreshold": 80
+    },
+    "block": {
+      "amount": 20000000,
+      "type": "tokens",
+      "warningThreshold": 80
+    }
+  },
+  "modelContextLimits": {
+    "haiku": 200000,
+    "sonnet": 1000000,
+    "opus": 1000000
+}
+}

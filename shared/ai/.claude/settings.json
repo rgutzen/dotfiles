@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/04_RESOURCES/Templates/Dippy/bin/dippy-hook"
+            "command": "D=\"$HOME/04_RESOURCES/Templates/Dippy/bin/dippy-hook\"; [ -x \"$D\" ] && exec \"$D\"; exit 0"
           }
         ]
       }
@@ -15,7 +15,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "echo -n \"$(tput setab 0)$(tput setaf 15)  $(date +%H:%M) $(tput sgr0)\" && npx -y @owloops/claude-powerline@latest --theme=custom --style=powerline --config=~/.claude/powerline/claude-powerline.json"
+    "command": "echo -n \"$(tput setab 0)$(tput setaf 15) \uf43a $(date +%H:%M) $(tput sgr0)\" && npx -y @owloops/claude-powerline@latest --theme=custom --style=powerline --config=~/.claude/powerline/claude-powerline.json"
   },
   "enabledPlugins": {
     "code-review@claude-plugins-official": true,
