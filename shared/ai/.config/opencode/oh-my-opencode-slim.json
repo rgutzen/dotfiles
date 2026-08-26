@@ -1,0 +1,230 @@
+{
+  "$schema": "https://unpkg.com/oh-my-opencode-slim@latest/oh-my-opencode-slim.schema.json",
+  "preset": "deepseek",
+  "disabled_agents": [
+    "designer",
+    "council"
+  ],
+  "agents": {
+    "skill-specialist": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "variant": "low",
+      "prompt": "You are a domain specialist who loads and applies project-specific skills.\n\nWhen called:\n1. The orchestrator will name a skill (e.g. '@skill-specialist rdkit compute molecular descriptors').\n2. Use the `skill` tool to load the named SKILL.md from .opencode/skills/.\n3. Apply the skill's instructions to the task.\n4. Return results concisely.\n\nSkills contain curated instructions, API references, and best practices. Trust them over your general knowledge.",
+      "orchestratorPrompt": "@skill-specialist <skill-name>\n- Role: Domain specialist for a library/tool whose SKILL.md lives in .opencode/skills/\n- First loads the skill, then works on the task\n- **Delegate when:** Task requires deep domain knowledge available as a project skill (check .opencode/skills/ for available skills)\n- **Don't delegate:** General programming tasks, tasks where general knowledge suffices, or when the skill isn't symlinked in .opencode/skills/\n- Always specify the skill name, e.g., '@skill-specialist rdkit compute fingerprints for this dataset'\n- Skills active in this project are listed in AGENTS.md under 'Project Skills'"
+    }
+  },
+  "presets": {
+    "openai": {
+      "orchestrator": {
+        "model": "openai/gpt-5.5",
+        "skills": [
+          "*"
+        ],
+        "mcps": [
+          "*",
+          "!context7"
+        ]
+      },
+      "oracle": {
+        "model": "openai/gpt-5.5",
+        "variant": "high",
+        "skills": [
+          "simplify"
+        ],
+        "mcps": []
+      },
+      "librarian": {
+        "model": "openai/gpt-5.4-mini",
+        "variant": "low",
+        "skills": [],
+        "mcps": [
+          "websearch",
+          "context7",
+          "grep_app"
+        ]
+      },
+      "explorer": {
+        "model": "openai/gpt-5.4-mini",
+        "variant": "low",
+        "skills": [],
+        "mcps": []
+      },
+      "designer": {
+        "model": "openai/gpt-5.4-mini",
+        "variant": "medium",
+        "skills": [
+          "agent-browser"
+        ],
+        "mcps": []
+      },
+      "fixer": {
+        "model": "openai/gpt-5.4-mini",
+        "variant": "low",
+        "skills": [],
+        "mcps": []
+      }
+    },
+    "deepseek": {
+      "orchestrator": {
+        "model": "deepseek/deepseek-v4-pro",
+        "skills": [
+          "*"
+        ],
+        "mcps": [
+          "*",
+          "!context7"
+        ]
+      },
+      "oracle": {
+        "model": "deepseek/deepseek-v4-pro",
+        "variant": "max",
+        "skills": [
+          "simplify"
+        ],
+        "mcps": []
+      },
+      "librarian": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": [
+          "websearch",
+          "context7",
+          "grep_app"
+        ]
+      },
+      "explorer": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": []
+      },
+      "fixer": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": []
+      },
+      "observer": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": []
+      }
+    },
+    "anthropic": {
+      "orchestrator": {
+        "model": [
+          "anthropic/claude-opus-5",
+          "deepseek/deepseek-v4-pro"
+        ],
+        "skills": [
+          "*"
+        ],
+        "mcps": [
+          "*",
+          "!context7"
+        ]
+      },
+      "oracle": {
+        "model": [
+          "anthropic/claude-sonnet-5",
+          "deepseek/deepseek-v4-pro"
+        ],
+        "variant": "high",
+        "skills": [
+          "simplify"
+        ],
+        "mcps": []
+      },
+      "librarian": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": [
+          "websearch",
+          "context7",
+          "grep_app"
+        ]
+      },
+      "explorer": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": []
+      },
+      "fixer": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": []
+      },
+      "observer": {
+        "model": "deepseek/deepseek-v4-flash",
+        "skills": [],
+        "mcps": []
+      }
+    },
+    "qwen": {
+      "orchestrator": {
+        "model": "openrouter/qwen/qwen3.8-max",
+        "skills": [
+          "*"
+        ],
+        "mcps": [
+          "*",
+          "!context7"
+        ]
+      },
+      "oracle": {
+        "model": "openrouter/qwen/qwen3.8-max",
+        "variant": "high",
+        "skills": [
+          "simplify"
+        ],
+        "mcps": []
+      },
+      "librarian": {
+        "model": "openrouter/qwen/qwen3.6-flash",
+        "variant": "low",
+        "skills": [],
+        "mcps": [
+          "websearch",
+          "context7",
+          "grep_app"
+        ]
+      },
+      "explorer": {
+        "model": "openrouter/qwen/qwen3.6-flash",
+        "variant": "low",
+        "skills": [],
+        "mcps": []
+      },
+      "designer": {
+        "model": "openrouter/qwen/qwen3.7-plus",
+        "variant": "medium",
+        "skills": [],
+        "mcps": []
+      },
+      "fixer": {
+        "model": "openrouter/qwen/qwen3.6-flash",
+        "variant": "low",
+        "skills": [],
+        "mcps": []
+      },
+      "observer": {
+        "model": "openrouter/qwen/qwen3.6-flash",
+        "variant": "low",
+        "skills": [],
+        "mcps": []
+      }
+    }
+  },
+  "acpAgents": {
+    "hermes": {
+      "command": "hermes",
+      "args": ["acp"],
+      "env": {
+        "PATH": "/home/rgutzen/.local/bin:/home/rgutzen/.hermes/bin:/usr/bin:/bin"
+      },
+      "wrapperModel": "deepseek/deepseek-v4-flash",
+      "timeoutMs": 300000,
+      "permissionMode": "allow",
+      "description": "Hermes Agent — messaging (Signal), web search, browser automation, cron scheduling, voice mode, home automation. Persistent autonomous agent that learns across sessions.",
+      "orchestratorPrompt": "@hermes (via ACP)\n- External agent: Hermes Agent with 70+ tools, Signal gateway, cron scheduler, browser automation, voice mode.\n- **Delegate when:** Sending Signal messages or notifications · Web scraping / browser automation · Managing cron / scheduled tasks · Voice interaction · Home Assistant / home automation · Any life-automation or non-coding task where Hermes' platform gateways are the right tool.\n- **Don't delegate:** Coding tasks, code review, file operations, architecture decisions — these are OpenCode's domain.\n- Delegation wraps Hermes as a sandboxed ACP subagent with read-only access to the conversation prompt."
+    }
+  }
+}

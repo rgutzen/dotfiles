@@ -24,7 +24,7 @@ command -v stow >/dev/null || {
     exit 1
 }
 
-SHARED=(bash git conda gtk systemd)
+SHARED=(bash git conda gtk systemd ai)
 case "${XDG_SESSION_TYPE:-x11}" in
     wayland) SESSION=wayland; PKGS=(hypr waybar) ;;
     *)       SESSION=x11;     PKGS=(i3 polybar autorandr wm-scripts) ;;
