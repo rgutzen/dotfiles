@@ -3,7 +3,6 @@
   "plugin": [
     "opencode-pty",
     "@loreai/opencode",
-    "list",
     "@ex-machina/opencode-anthropic-auth@latest",
     "oh-my-opencode-slim",
     "opencode-acp@latest"
@@ -17,7 +16,7 @@
     }
   },
   "lsp": true,
-  "model": "anthropic/claude-sonnet-4-6",
+  "model": "anthropic/claude-sonnet-5",
   "compaction": {
     "auto": false
   }

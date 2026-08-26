@@ -217,9 +217,6 @@
     "hermes": {
       "command": "hermes",
       "args": ["acp"],
-      "env": {
-        "PATH": "$HOME/.local/bin:$HOME/.hermes/bin:/usr/bin:/bin"
-      },
       "wrapperModel": "deepseek/deepseek-v4-flash",
       "timeoutMs": 300000,
       "permissionMode": "allow",
