@@ -98,6 +98,14 @@ run_stow() {
 # Package lists stay explicit rather than globbed: shared/theme/ is a generator
 # with its own script and schemes, not a stow package, and globbing would link
 # apply-theme.sh into $HOME.
+#
+# The same package name may appear in several tiers — shared/bash, ubuntu/bash,
+# arch/bash and x11/bash all exist. They are distinct packages in distinct stow
+# directories that deposit different files into one ~/.config/bash/{env,rc}.d/,
+# which ~/.bashrc then composes. No file is written by two packages, so they
+# merge rather than conflict. This only works with --no-folding: with tree
+# folding the first package to run would claim rc.d/ as a single directory
+# symlink and the next would collide.
 stow_tier() {
     local label="$1" dir="$2"; shift 2
     [[ -d "$dir" ]] || return 0
@@ -112,8 +120,8 @@ stow_tier() {
 }
 
 case "${XDG_SESSION_TYPE:-x11}" in
-    wayland) SESSION=wayland; SESSION_PKGS=(hypr waybar) ;;
-    *)       SESSION=x11;     SESSION_PKGS=(i3 polybar autorandr wm-scripts) ;;
+    wayland) SESSION=wayland; SESSION_PKGS=(hypr waybar bash) ;;
+    *)       SESSION=x11;     SESSION_PKGS=(i3 polybar autorandr wm-scripts bash) ;;
 esac
 
 # OS tier, kept separate from the session tier on purpose. Omarchy is Arch *and*
@@ -122,8 +130,8 @@ esac
 # none of them. Session type and distro are independent axes, so they get
 # independent tiers.
 OS_TIER=""; OS_PKGS=()
-[[ -f /etc/debian_version ]] && { OS_TIER=ubuntu; OS_PKGS=(os-scripts); }
-[[ -f /etc/arch-release   ]] && { OS_TIER=arch;   OS_PKGS=(os-scripts); }
+[[ -f /etc/debian_version ]] && { OS_TIER=ubuntu; OS_PKGS=(os-scripts bash); }
+[[ -f /etc/arch-release   ]] && { OS_TIER=arch;   OS_PKGS=(os-scripts bash); }
 
 echo "▸ dotfiles: $DOTFILES"
 echo "▸ session:  $SESSION"
