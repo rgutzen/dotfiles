@@ -1,4 +1,5 @@
 {
+  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {
@@ -17,23 +18,17 @@
     "command": "echo -n \"$(tput setab 0)$(tput setaf 15)  $(date +%H:%M) $(tput sgr0)\" && npx -y @owloops/claude-powerline@latest --theme=custom --style=powerline --config=~/.claude/powerline/claude-powerline.json"
   },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": false,
     "code-review@claude-plugins-official": true,
     "github@claude-plugins-official": true,
     "claude-md-management@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
     "claude-api@anthropic-agent-skills": true,
     "document-skills@anthropic-agent-skills": true,
-    "example-skills@anthropic-agent-skills": false,
     "context7@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": false,
     "code-simplifier@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
-    "huggingface-skills@claude-plugins-official": false,
-    "coderabbit@claude-plugins-official": true,
-    "atomic-agents@claude-plugins-official": true,
-    "sourcegraph@claude-plugins-official": false
+    "20minds@20minds": true
   },
   "extraKnownMarketplaces": {
     "anthropic-agent-skills": {
@@ -41,12 +36,23 @@
         "source": "github",
         "repo": "anthropics/skills"
       }
+    },
+    "20minds": {
+      "source": {
+        "source": "github",
+        "repo": "20minds/agent-plugins"
+      }
+    },
+    "ruflo": {
+      "source": {
+        "source": "github",
+        "repo": "ruvnet/ruflo"
+      }
     }
   },
   "effortLevel": "high",
   "tui": "fullscreen",
   "theme": "dark",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true,
-  "model": "opus"
+  "voiceEnabled": true
 }

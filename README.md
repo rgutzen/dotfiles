@@ -22,6 +22,7 @@ shared/     portable across every machine
   conda/    .condarc
   gtk/      .config/gtk-{2,3,4}.0/
   theme/    base24 colour scheme + generator  (see theme/README.md)
+  ai/       Claude Code + OpenCode config, curated plugin/skill set  (see ai/README.md)
 
 x11/        X280 — Ubuntu, i3, X11
   i3/       polybar/       autorandr/
@@ -80,6 +81,13 @@ dunst, GTK and the terminal. Change a colour in one file, run one script.
 ```
 
 See [`shared/theme/README.md`](shared/theme/README.md).
+
+## AI tooling
+
+Claude Code + OpenCode config, deliberately curated (not everything that's
+ever been installed makes the cut — see the audit in the README below).
+
+See [`shared/ai/README.md`](shared/ai/README.md).
 
 ## Notes
 
