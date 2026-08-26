@@ -83,7 +83,7 @@ Removing a file from a package does not remove its link — `./bootstrap.sh` use
 
 ```
 shared/     portable across every machine
-  bash/     .bashrc .bash_aliases .profile
+  bash/     .bash_profile .profile .bashrc + .config/bash/rc.d/  (see below)
   git/      .gitconfig .config/git/
   conda/    .condarc
   gtk/      .config/gtk-{2,3,4}.0/
@@ -96,8 +96,8 @@ x11/        session tier — i3, X11
 wayland/    session tier — Hyprland (populate on the new machine)
   hypr/     waybar/
 
-ubuntu/     OS tier — apt/snap maintenance scripts
-arch/       OS tier — pacman/Omarchy equivalents (create when needed)
+ubuntu/     OS tier — apt/snap maintenance scripts, Debian shell bits
+arch/       OS tier — Omarchy shell bits (add os-scripts when needed)
 
 secrets.example/   templates — names only, never values
 ```
@@ -157,20 +157,85 @@ The clean-tree check is the entire safety mechanism. `--adopt` really does
 overwrite the repo's copy, and without a clean tree adopted content is
 indistinguishable from your own uncommitted edits.
 
-### Distro defaults are sourced, not vendored
+### Bash is composed from fragments, not copied per machine
 
-Omarchy ships shell defaults its own updater owns. Copying them into a tier here
-would create a fork you'd have to hand-resync, so `shared/bash/.bashrc` sources
-them behind a guard instead:
+`~/.bashrc` is a **spine**: it sources numbered fragments out of two drop-in
+directories and does nothing else.
 
-```bash
-[ -f ~/.local/share/omarchy/default/bash/rc ] && . ~/.local/share/omarchy/default/bash/rc
+```
+env.d/*.sh   environment — every shell, interactive or not
+rc.d/*.sh    interactive only — aliases, prompt, completion, colours
 ```
 
-Same reasoning as the AI plugins: track the *manifest*, let upstream own the
-payload. Everything else in `.bashrc` is likewise guarded (`starship`, `nvm`,
-`cargo`, `conda`, `setxkbmap`), so one shared file degrades cleanly on a machine
-that has fewer tools installed rather than erroring on every interactive shell.
+Stow assembles those directories from whichever packages apply to the machine.
+On the X280 that is three packages landing in one directory:
+
+```
+shared/bash  →  10-shell  20-para  30-devtools  40-ai  80-prompt  90-theme
+ubuntu/bash  →      15-ubuntu          (snap, linuxbrew, texlive, lesspipe)
+x11/bash     →                    50-x11        (setxkbmap, i3 lock alias)
+```
+
+On Omarchy, `arch/bash` supplies `15-omarchy` in both `env.d/` and `rc.d/`
+instead, and `50-x11` is simply absent. **A shared change is still one edit**,
+which is the whole reason this repo uses directories rather than branches.
+
+Three properties make it work:
+
+- **Numeric prefixes** give a deterministic order across packages, since no
+  package knows what the others contribute. `15-ubuntu` slots between `10-shell`
+  and `20-para` regardless of which package delivered it.
+- **No file is written by two packages**, so stow merges them instead of
+  reporting a conflict. This needs `--no-folding`: with tree folding the first
+  package would claim `rc.d/` as one directory symlink and the next would collide.
+- **An unmatched glob stays literal** and fails the `-r` test, so a missing
+  drop-in directory is a no-op. `env.d/` does not exist on the X280 at all.
+
+What is deliberately *not* tracked is the distro skeleton — `debian_chroot`,
+`lesspipe`, and the ~35-line `PS1` block each distro ships in `/etc/skel/.bashrc`.
+That block was dead on both machines anyway, because starship replaces `PS1`
+wholesale; carrying it only created divergence to maintain.
+
+### Login shells: `.bash_profile` is the entry point
+
+Bash reads only the **first** of `~/.bash_profile`, `~/.bash_login`, `~/.profile`
+for a login shell. Omarchy ships its own `.bash_profile`, so this repo's
+`.profile` was never read there — not overridden, never read. That silent
+shadowing is a large part of how the two machines drifted apart.
+
+`shared/bash/.bash_profile` now makes the chain explicit and identical everywhere:
+
+```
+login shell        .bash_profile → .profile (env) → .bashrc (interactive)
+interactive only                                  → .bashrc
+```
+
+So `.bash_profile` holds nothing of its own. Environment goes in `.profile`;
+interactive configuration goes in an `rc.d/` fragment. Putting interactive
+config directly in `.bash_profile` — as the Omarchy version did — means a new
+terminal window and a login shell get different environments.
+
+### Distro defaults are sourced, not vendored
+
+Omarchy ships shell defaults its own updater owns. Copying them into a tier
+here would create a fork you'd have to hand-resync, so `arch/bash`'s fragments
+source them behind a guard instead:
+
+```bash
+# env.d/15-omarchy.sh — needed by non-interactive shells too
+[ -r /usr/share/omarchy/default/bash/env-bootstrap ] && . /usr/share/omarchy/default/bash/env-bootstrap
+# rc.d/15-omarchy.sh
+[ -n "$OMARCHY_PATH" ] && [ -r "$OMARCHY_PATH/default/bash/rc" ] && . "$OMARCHY_PATH/default/bash/rc"
+```
+
+The `-n "$OMARCHY_PATH"` test is load-bearing. Unguarded,
+`source "$OMARCHY_PATH/default/bash/rc"` expands to `/default/bash/rc` wherever
+Omarchy is absent and errors on *every shell*.
+
+Same reasoning as the AI plugins: track the manifest, let upstream own the
+payload. Every fragment is guarded the same way (`starship`, `nvm`, `cargo`,
+`conda`, `setxkbmap`, `lesspipe`), so a machine with fewer tools installed gets
+a quiet no-op rather than an error on every interactive shell.
 
 ## Machine-local values and secrets
 
