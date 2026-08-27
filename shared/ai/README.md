@@ -19,9 +19,14 @@ accumulated over time.
                       an untracked file referenced from a tracked one is a
                       config that silently degrades on a new machine.
 .config/opencode/
-  opencode.json              Core OpenCode config: plugins, model, agent toggles
+  opencode.json              Core OpenCode config: plugins, model, agent toggles,
+                             local-Ollama provider block (see "Local models" below)
   oh-my-opencode-slim.json   OMO config: DeepSeek preset, custom skill-specialist
                              agent, disabled agents (designer, council)
+.hermes/
+  config.yaml                Hermes config: default model, `model_aliases` and
+                             `custom_providers` entries for the local Ollama
+                             models (see "Local models" below)
 ```
 
 ## What is deliberately *not* here
@@ -112,6 +117,94 @@ portable via git. Re-authenticate fresh on the new machine.
   model
 - **OpenRouter** — secondary routing for models not directly available
 
+## Local models (Ollama)
+
+Two models, chosen for this machine (Ryzen AI 9 HX 370 / Radeon 890M iGPU,
+61GB RAM) after evaluating what actually runs on Vulkan without hitting a
+known llama.cpp bug class:
+
+| Role | Model | Why |
+|---|---|---|
+| Main reasoning | `qwen3:30b-a3b-thinking-2507-q4_K_M` (19GB) | 30B-class MoE (3B active/token) — measured **35 tok/s decode** on the iGPU, beating the ~20-25 tok/s estimate |
+| Always-on / fast | `qwen3:4b-instruct-2507-q4_K_M` (2.5GB) | Small enough to stay resident permanently alongside the main model |
+
+**Ruled out:** GLM-5.3-Flash (320B total/18B active despite the "Flash" name —
+smallest quant is 114GB, doesn't fit in 61GB RAM). Qwen3.8-27B and any
+Qwen3.5/3.6/3.8 model — all use Gated DeltaNet hybrid attention, which hits an
+open, unfixed llama.cpp Vulkan bug (decode collapses to ~4 tok/s on RDNA
+iGPUs/GPUs — [ggml-org/llama.cpp#26795](https://github.com/ggml-org/llama.cpp/issues/26795)).
+Qwen3-Coder-30B-A3B is a safe (non-GDN) alternative if a coding-specific model
+is wanted later. No AMD XDNA NPU backend exists in llama.cpp/ollama yet — the
+"always-on" model runs on the iGPU via Vulkan, not the NPU.
+
+### Installation
+
+```bash
+sudo pacman -S ollama-vulkan   # not the plain `ollama` package — Vulkan backend
+
+# iGPU is dropped by default; and allow 2 models loaded at once (small +
+# main resident simultaneously fits in the ~31GB GPU-addressable pool)
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+sudo tee /etc/systemd/system/ollama.service.d/override.conf <<'EOF'
+[Service]
+Environment="OLLAMA_MAX_LOADED_MODELS=2"
+Environment="OLLAMA_IGPU_ENABLE=1"
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now ollama
+
+ollama pull qwen3:30b-a3b-thinking-2507-q4_K_M
+ollama pull qwen3:4b-instruct-2507-q4_K_M
+```
+
+Pin the small model resident forever (ollama's default 5-minute idle-unload
+otherwise applies to it too):
+
+```bash
+sudo tee /etc/systemd/system/ollama-warm-small.service <<'EOF'
+[Unit]
+Description=Keep qwen3:4b-instruct-2507 resident in Ollama (always-on small model)
+After=ollama.service
+Requires=ollama.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/curl -sf -X POST http://localhost:11434/api/generate -d '{"model":"qwen3:4b-instruct-2507-q4_K_M","keep_alive":-1,"prompt":"","stream":false}' -o /dev/null
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now ollama-warm-small
+```
+
+These two units are system-level (`/etc/systemd/system/`), so — unlike
+`shared/systemd`'s user-level timers — stow cannot deploy them; they're
+copy-paste, not tracked files.
+
+### Integration status
+
+- **Hermes** — working, via `model_aliases` (`qwen-thinking`, `qwen-fast`) and
+  a `custom_providers` context-length override in `.hermes/config.yaml` (Hermes
+  hard-requires ≥64K context; ollama otherwise reports each model's full
+  262144-token native max, which the ~31GB GTT pool can't back with KV cache).
+  Use the `hermes-fast`/`hermes-think` aliases in
+  `shared/bash/.config/bash/rc.d/40-ai.sh` — Hermes' default toolset + rule
+  injection adds ~20k fixed prompt tokens/turn (~55KB of tool-schema JSON
+  across plugins you won't use locally: `computer_use`, `browser-use`, `tts`,
+  …), which turns a "say pong" into 4+ minutes of iGPU prefill. The aliases'
+  `--ignore-rules -t file,terminal` cut that to ~5k tokens (confirmed: 4+ min
+  → ~15-25s per turn).
+- **OpenCode** — configured (`provider.local-ollama` in `opencode.json`,
+  `local-ollama/<model>` to select) but **currently broken by an upstream
+  bug**: custom-provider `options` (`baseURL`/`apiKey`) are silently dropped
+  at runtime, so requests fall through to the real OpenAI API instead of
+  localhost. Confirmed two ways — hand-written config, and OpenCode's own
+  `ollama launch opencode` integration — both hit it. Maintainer-closed as
+  "not planned"; nothing fixable on our end. The config is left in place —
+  it'll start working the moment upstream fixes it, at no cost meanwhile.
+
 ## Setup on a new machine
 
 Order matters: **install each harness first, then deploy.** Claude Code and
@@ -178,12 +271,11 @@ wherever they're backed up. See `HERMES-SIGNAL-SETUP.md` (in `B_Tech/`, not
 this repo — it names a personal phone number, so it stays out of any git
 repo) for the Signal-side configuration.
 
-### 4. LM Studio (new machine only)
-Local model runner, replacing the stale Ollama setup from the X280 (one
-7-month-old model, unused). Install LM Studio, pull a current tool-use-
-capable model — don't just carry the old one forward. Relevant if you set up
-self-hosted inbox-zero (see `MIGRATION-PLAN.md` §5.5 in `pazras-system`),
-which needs a local LLM for triage.
+### 4. Local models (Ollama)
+See "Local models" below — this replaces the stale LM Studio plan and the
+7-month-old unused Ollama setup from the X280. Needed for self-hosted
+inbox-zero (`MIGRATION-PLAN.md` §5.5, `06_SYSTEM` repo), which triages mail
+with a local LLM.
 
 ### 5. GPG (recommended alongside the above, for commit signing)
 Not currently in use (no `commit.gpgsign` configured), but worth starting

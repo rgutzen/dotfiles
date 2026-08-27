@@ -1,5 +1,21 @@
 {
-  "model": "sonnet",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/04_RESOURCES/Templates/Dippy/bin/dippy-hook"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "echo -n \"$(tput setab 0)$(tput setaf 15)  $(date +%H:%M) $(tput sgr0)\" && npx -y @owloops/claude-powerline@latest --theme=custom --style=powerline --config=~/.claude/powerline/claude-powerline.json"
+  },
   "enabledPlugins": {
     "code-review@claude-plugins-official": true,
     "github@claude-plugins-official": true,
@@ -10,7 +26,7 @@
     "context7@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
-    "explanatory-output-style@claude-plugins-official": false,
+    "explanatory-output-style@claude-plugins-official": true,
     "20minds@20minds": true
   },
   "extraKnownMarketplaces": {
@@ -35,7 +51,7 @@
   },
   "effortLevel": "high",
   "tui": "fullscreen",
-  "theme": "custom:omarchy",
+  "theme": "dark",
   "agentPushNotifEnabled": true,
   "voiceEnabled": true
 }
