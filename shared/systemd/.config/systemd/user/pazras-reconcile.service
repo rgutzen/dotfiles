@@ -6,7 +6,7 @@ Type=oneshot
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 # DRY RUN on the timer, deliberately. Deleting backup data is never automatic:
 # the scheduled run reports what is eligible; you apply it with
-#   para-system backup reconcile --execute
-ExecStart=%h/06_SYSTEM/scripts/para-system-manager.sh backup reconcile
+#   pazras-system backup reconcile --execute
+ExecStart=%h/06_SYSTEM/scripts/pazras-system backup reconcile
 Nice=19
 IOSchedulingClass=idle

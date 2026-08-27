@@ -83,7 +83,7 @@ populated() { [[ -n "$(find "$1" -mindepth 1 -type f 2>/dev/null | head -1)" ]];
 # GNU stow 2.3.1 (Ubuntu 22.04's version) has a known bug, fixed upstream, that
 # prints "BUG in find_stowed_path? Absolute/relative mismatch" once per absolute
 # symlink it meets while scanning the target tree — on the X280 that is
-# ~/.para-system. It is a false alarm raised during the unstow half of --restow;
+# ~/.pazras-system. It is a false alarm raised during the unstow half of --restow;
 # the links are still made correctly. Drop that one line, keep everything else
 # stow says, and keep its exit status.
 run_stow() {

@@ -171,7 +171,7 @@ Stow assembles those directories from whichever packages apply to the machine.
 On the X280 that is three packages landing in one directory:
 
 ```
-shared/bash  →  10-shell  20-para  30-devtools  40-ai  80-prompt  90-theme
+shared/bash  →  10-shell  20-pazras  30-devtools  40-ai  80-prompt  90-theme
 ubuntu/bash  →      15-ubuntu          (snap, linuxbrew, texlive, lesspipe)
 x11/bash     →                    50-x11        (setxkbmap, i3 lock alias)
 ```
@@ -184,7 +184,7 @@ Three properties make it work:
 
 - **Numeric prefixes** give a deterministic order across packages, since no
   package knows what the others contribute. `15-ubuntu` slots between `10-shell`
-  and `20-para` regardless of which package delivered it.
+  and `20-pazras` regardless of which package delivered it.
 - **No file is written by two packages**, so stow merges them instead of
   reporting a conflict. This needs `--no-folding`: with tree folding the first
   package would claim `rc.d/` as one directory symlink and the next would collide.
