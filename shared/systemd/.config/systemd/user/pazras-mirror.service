@@ -4,7 +4,7 @@ OnFailure=pazras-notify@%n.service
 [Service]
 Type=oneshot
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/scripts/proton-mirror.sh
+ExecStart=%h/06_SYSTEM/scripts/backup/proton-mirror.sh
 Nice=19
 IOSchedulingClass=idle
 TimeoutStartSec=12h

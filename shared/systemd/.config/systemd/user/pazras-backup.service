@@ -8,7 +8,7 @@ Type=oneshot
 # Full PATH: a systemd unit does not inherit an interactive shell's PATH.
 # (zstd resolving only inside miniforge3 is exactly this class of bug.)
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/scripts/para-system-manager.sh backup
+ExecStart=%h/06_SYSTEM/scripts/pazras-system backup
 # restic returns 3 for "completed, some files unreadable" — a warning, not a
 # failure. Treat it as success so it does not trip OnFailure, but it is logged.
 SuccessExitStatus=0 3
