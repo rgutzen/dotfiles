@@ -138,7 +138,7 @@ echo "▸ session:  $SESSION"
 echo "▸ os:       ${OS_TIER:-(unrecognised — OS tier skipped)}"
 echo
 
-stow_tier shared "$DOTFILES/shared" bash git conda gtk systemd ai
+stow_tier shared "$DOTFILES/shared" bash git conda gtk systemd ai inbox-zero
 stow_tier "$SESSION" "$DOTFILES/$SESSION" "${SESSION_PKGS[@]}"
 [[ -n "$OS_TIER" ]] && stow_tier "$OS_TIER" "$DOTFILES/$OS_TIER" "${OS_PKGS[@]}"
 
@@ -196,6 +196,14 @@ if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; the
     for t in pazras-backup pazras-sync pazras-verify pazras-prune pazras-validate pazras-mirror; do
         systemctl --user enable --now "$t.timer" >/dev/null 2>&1 && echo "  ✓ $t.timer"
     done
+    # inbox-zero.service: not a timer, just a boot-time `docker compose up -d`
+    # (containers already carry restart: always, so this mainly matters after
+    # a full reboot). Only enable it if ~/.inbox-zero/.env exists — the compose
+    # stack fails fast without real secrets, and .env is deliberately never
+    # created by this script (see .env.example in the inbox-zero package).
+    if [[ -f "$HOME/.inbox-zero/.env" ]]; then
+        systemctl --user enable --now inbox-zero.service >/dev/null 2>&1 && echo "  ✓ inbox-zero.service"
+    fi
     # pazras-archive-flush.path is deliberately NOT enabled. The flush moves
     # data out of 05_ARCHIVES onto BigFish, where 05_ARCHIVES-EXTERNAL is still
     # single-copy (the archives-external restic repo waits on Disk B). An

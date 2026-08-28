@@ -279,6 +279,15 @@ ever been installed makes the cut — see the audit in the README below).
 
 See [`shared/ai/README.md`](shared/ai/README.md).
 
+## Self-hosted inbox-zero
+
+Docker Compose config and autostart unit for the self-hosted
+[inbox-zero](https://github.com/elie222/inbox-zero) email assistant, backed
+by the local Ollama models above. Secrets stay out of git — see the
+`.env.example` template and setup steps.
+
+See [`shared/inbox-zero/README.md`](shared/inbox-zero/README.md).
+
 ## Notes
 
 - **i3 4.20.1 has no `include` directive** (added in 4.21), so generated colours are
