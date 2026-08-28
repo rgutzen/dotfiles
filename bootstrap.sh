@@ -138,7 +138,7 @@ echo "▸ session:  $SESSION"
 echo "▸ os:       ${OS_TIER:-(unrecognised — OS tier skipped)}"
 echo
 
-stow_tier shared "$DOTFILES/shared" bash git conda gtk systemd ai inbox-zero
+stow_tier shared "$DOTFILES/shared" bash git conda gtk systemd ai inbox-zero proton bin
 stow_tier "$SESSION" "$DOTFILES/$SESSION" "${SESSION_PKGS[@]}"
 [[ -n "$OS_TIER" ]] && stow_tier "$OS_TIER" "$DOTFILES/$OS_TIER" "${OS_PKGS[@]}"
 

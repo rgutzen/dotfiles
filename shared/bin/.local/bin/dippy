@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Toggle the Claude Code PreToolUse dippy-hook on/off.
+# The hook itself checks this sentinel file on every invocation, so the
+# effect is immediate — no Claude Code restart needed.
+set -euo pipefail
+
+SENTINEL="$HOME/.claude/dippy-hook.disabled"
+
+case "${1:-status}" in
+    on)
+        rm -f "$SENTINEL"
+        echo "dippy: enabled"
+        ;;
+    off)
+        touch "$SENTINEL"
+        echo "dippy: disabled"
+        ;;
+    status)
+        if [[ -f "$SENTINEL" ]]; then
+            echo "dippy: disabled"
+        else
+            echo "dippy: enabled"
+        fi
+        ;;
+    *)
+        echo "usage: dippy {on|off|status}" >&2
+        exit 1
+        ;;
+esac

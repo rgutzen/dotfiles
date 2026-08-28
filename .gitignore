@@ -35,6 +35,13 @@ local.sh
 secrets.env
 *.local
 
+# *.local above is meant for override-marker files (foo.local), but as a
+# glob it also matches a directory literally named ".local" — which is
+# legitimate XDG structure inside a stow package (e.g. shared/bin/.local/bin/),
+# not a secret override. Un-ignore the directory itself; *.local still
+# catches real override files anywhere else.
+!**/.local/
+
 # environments
 .env
 .env.*
