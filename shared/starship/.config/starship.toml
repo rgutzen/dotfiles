@@ -1,0 +1,102 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+add_newline = true
+command_timeout = 200
+format = """
+$username$hostname\
+$directory\
+$git_branch$git_status\
+$conda$docker_context\
+$cmd_duration\
+$line_break$character"""
+
+palette = 'gruvbox'
+
+[palettes.gruvbox]
+color_fg       = '#d4be98'
+color_fg_dim   = '#7c6f64'
+color_accent   = '#7daea3'  # teal
+color_green    = '#a9b665'
+color_yellow   = '#d8a657'
+color_red      = '#ea6962'
+color_blue     = '#7daea3'
+color_magenta  = '#d3869b'
+color_cyan     = '#89b482'
+
+[username]
+show_always = false
+style_user = "fg:color_accent"
+style_root = "bold fg:color_red"
+format = '[$user]($style)@'
+
+[hostname]
+ssh_only = true
+ssh_symbol = ""
+style = "fg:color_accent"
+format = '[$hostname]($style) '
+
+[directory]
+style = "fg:color_fg"
+read_only_style = "fg:color_red"
+format = "[$path]($style)[$read_only]($read_only_style) "
+truncation_length = 3
+truncate_to_repo = true
+truncation_symbol = "…/"
+repo_root_style = "bold fg:color_green"
+repo_root_format = "[$repo_root]($repo_root_style) "
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Projects" = "󰲋 "
+
+[git_branch]
+symbol = " "
+style = "fg:color_yellow"
+format = '[$symbol$branch]($style) '
+
+[git_status]
+style = "fg:color_cyan"
+format = '[$all_status$ahead_behind]($style) '
+ahead = "⇡${count} "
+diverged = "⇕⇡${ahead_count}⇣${behind_count} "
+behind = "⇣${count} "
+conflicted = " "
+up_to_date = ""
+untracked = "? "
+modified = " "
+stashed = " "
+staged = " "
+renamed = "󰑕 "
+deleted = " "
+
+[conda]
+disabled = false
+symbol = "󱔎 "
+style = "fg:color_magenta"
+ignore_base = true
+truncation_length = 0
+format = '[$symbol$environment]($style) '
+
+[docker_context]
+disabled = false
+symbol = " "
+style = "fg:color_blue"
+format = '[$symbol$context]($style) '
+only_with_files = false
+
+[cmd_duration]
+disabled = false
+min_time = 3_000
+style = "fg:color_fg_dim"
+format = '[󰚭 $duration]($style) '
+
+[line_break]
+disabled = false
+
+[character]
+success_symbol = '[❯](bold fg:color_accent)'
+error_symbol = '[❯](bold fg:color_red)'
+vimcmd_symbol = '[❮](bold fg:color_accent)'

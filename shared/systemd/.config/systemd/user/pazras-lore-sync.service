@@ -1,0 +1,17 @@
+[Unit]
+Description=Fast-forward the loreai fork from upstream
+Documentation=file:%h/06_SYSTEM/scripts/memory/lore-sync.sh
+OnFailure=pazras-notify@%n.service
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# --sync, not the interactive --check default: the script fast-forwards only
+# when the tree is clean and main is checked out, never rebases, and never
+# pushes. It therefore cannot lose work, and a timer that merely reported
+# "you are behind" would fire OnFailure every week until acted on.
+# --quiet keeps a successful run silent; the log is 06_SYSTEM/backups/.
+ExecStart=%h/06_SYSTEM/scripts/memory/lore-sync.sh --sync --quiet
+# Background housekeeping: never compete with interactive work for IO.
+Nice=10
+IOSchedulingClass=idle

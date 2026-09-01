@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly loreai fork sync
+
+[Timer]
+OnCalendar=Mon 10:00
+# The machine is not always up at 10:00 Monday; catch up on next boot rather
+# than silently skipping a week.
+Persistent=true
+# Avoid colliding with the other pazras timers that also wake on a schedule.
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

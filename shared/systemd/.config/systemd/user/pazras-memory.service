@@ -1,0 +1,19 @@
+[Unit]
+Description=Agent-memory consolidation — the nightly pass (9 stages)
+Documentation=file:%h/06_SYSTEM/agents/knowledge/operations/consolidation-cycle.md
+OnFailure=pazras-notify@%n.service
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin
+# M2: the pass runs all stages and commits its own work as ONE commit, so a bad
+# night is one `git revert`. It refuses on a dirty working tree — a dirty tree
+# means a human is mid-edit — and takes a lock so a Persistent= catch-up run
+# cannot overlap one already going.
+#
+# Stages 4 and 6 are PROPOSAL-ONLY: they write into the report, never the tree.
+# Read the report; it is the failure mode this design is most exposed to.
+#   ~/06_SYSTEM/agents/journal/reports/YYYY-MM-DD_consolidation.md
+ExecStart=%h/06_SYSTEM/scripts/memory/pazras-memory run
+Nice=10
+IOSchedulingClass=idle

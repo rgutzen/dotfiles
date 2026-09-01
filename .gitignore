@@ -4,6 +4,9 @@
 # defeating this file, not merely forgetting to add something.
 # ─────────────────────────────────────────────────────────────────────
 
+# local memory
+.lore.md
+
 # keys & certificates
 *.key
 *.pem

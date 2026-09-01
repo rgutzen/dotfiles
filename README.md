@@ -86,6 +86,7 @@ shared/     portable across every machine
   bash/     .bash_profile .profile .bashrc + .config/bash/rc.d/  (see below)
   git/      .gitconfig .config/git/
   conda/    .condarc
+  starship/ .config/starship.toml
   gtk/      .config/gtk-{2,3,4}.0/
   theme/    base24 colour scheme + generator  (see theme/README.md)
   ai/       Claude Code + OpenCode config, curated plugin/skill set  (see ai/README.md)

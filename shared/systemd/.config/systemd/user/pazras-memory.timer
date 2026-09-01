@@ -1,0 +1,15 @@
+[Unit]
+Description=Nightly agent-memory consolidation (pazras-memory)
+
+[Timer]
+# Nightly, per consolidation-cycle.md §Scheduling. Consolidation is SCHEDULED,
+# never volume-driven: a volume trigger makes consolidation a function of how
+# busy the week was, while decay is a function of time.
+OnCalendar=*-*-* 03:30
+# A suspended or powered-off laptop catches up on the next boot rather than
+# skipping a night. Level 3 enforcement — unskippable but asynchronous.
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target
