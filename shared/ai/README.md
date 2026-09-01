@@ -23,6 +23,15 @@ accumulated over time.
                              local-Ollama provider block (see "Local models" below)
   oh-my-opencode-slim.json   OMO config: DeepSeek preset, custom skill-specialist
                              agent, disabled agents (designer, council)
+.config/tweakcc/
+  config.json                tweakcc settings (themes, tool toggles, misc flags).
+                             Machine-specific state stays out: ccVersion and
+                             ccInstallationPath are tweakcc's own, regenerated on
+                             first --apply on a new machine.
+  system-prompts/*.md        The 271-file corpus for the pinned Claude Code
+                             version. See "tweakcc" section below — this is the
+                             *active* set only; the version pin is what keeps it
+                             from silently drifting.
 .hermes/
   config.yaml                Hermes config: default model, `model_aliases` and
                              `custom_providers` entries for the local Ollama
@@ -262,7 +271,42 @@ Two things to check on the new machine:
   the fix — the agent then inherits OpenCode's environment, which already has
   the right `PATH` from `.bashrc`.
 
-### 3. Hermes
+### 3. tweakcc
+
+[tweakcc](https://github.com/Piebald-AI/tweakcc) patches Claude Code with
+custom themes, tool tweaks, and a system-prompt corpus. Its config and prompt
+set live here; the *install state* (patched `cli.js`, backups, hash files,
+`prompt-data-cache/`) is machine-local and gitignored.
+
+```bash
+npm i -g @anthropic-ai/claude-code@2.1.112   # PINNED — see version note below
+npx tweakcc@4.3.2 --apply --yes
+```
+
+`bootstrap.sh` stows `config.json` and `system-prompts/*.md` into
+`~/.config/tweakcc/` as symlinks. On first `--apply`, tweakcc regenerates its
+own machine state (`ccVersion`, `ccInstallationPath`, the hash files, and the
+`.diff.html` previews) without touching the tracked files.
+
+**Version pin is load-bearing.** The 271-file corpus here is the *active* set
+for Claude Code **2.1.112**, not the full upstream catalog. Two hard constraints
+make that pin necessary:
+
+- **Claude Code ≥ 2.1.113** ships `bin/claude.exe` (an ELF native binary)
+  instead of a `cli.js`, so tweakcc always takes its native-extraction path.
+- **Claude Code ≥ 2.1.247** splits that bundle into ESM chunks, which tweakcc
+  4.3.3 cannot extract, and 4.3.3 adds a CJS-only `node --check` parse that
+  rejects the valid ESM `cli.js`.
+
+Net: only 2.1.112 + tweakcc 4.3.2 patch cleanly. Tracked upstream as
+[Piebald-AI/tweakcc#981](https://github.com/Piebald-AI/tweakcc/issues/981)
+(the CJS parse-check regression). When that's fixed, re-test against the
+latest Claude Code, re-sync the corpus to whatever version you land on, and
+drop the pin. The corpus is version-specific — `--apply` re-creates any missing
+`.md` for the version it's pointed at, so an unpinned upgrade would silently
+regenerate cut files.
+
+### 4. Hermes
 Hermes has its own installer and is **not** part of this dotfiles package —
 it manages a systemd gateway service, Signal integration, and its own plugin
 set (Lore memory, eagle-eye skill routing, rtk-rewrite). Run its own
@@ -271,13 +315,13 @@ wherever they're backed up. See `HERMES-SIGNAL-SETUP.md` (in `B_Tech/`, not
 this repo — it names a personal phone number, so it stays out of any git
 repo) for the Signal-side configuration.
 
-### 4. Local models (Ollama)
+### 5. Local models (Ollama)
 See "Local models" below — this replaces the stale LM Studio plan and the
 7-month-old unused Ollama setup from the X280. Needed for self-hosted
 inbox-zero (`MIGRATION-PLAN.md` §5.5, `06_SYSTEM` repo), which triages mail
 with a local LLM.
 
-### 5. GPG (recommended alongside the above, for commit signing)
+### 6. GPG (recommended alongside the above, for commit signing)
 Not currently in use (no `commit.gpgsign` configured), but worth starting
 fresh on the new machine while you're already generating new SSH keys:
 ```bash
