@@ -4,6 +4,13 @@
 # NOTE: `conda init` rewrites its managed block in ~/.bashrc, which is now a
 # spine. If you ever run it, move the block it adds back into this file.
 
+# Omarchy's bash rc does `set +h` ("hashing off for mise", sourced in
+# 15-omarchy.sh). conda/mamba's init below then calls `hash -r`, which bash
+# refuses while hashing is off, printing "bash: hash: hashing disabled" on
+# every shell. Re-enable hashing first — mise shims live at stable paths on
+# $PATH, so they don't need it off.
+set -h
+
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
 if [ -x "$HOME/.miniforge3/bin/conda" ]; then

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# lore — the loreai fork build, exposed on PATH.
+#
+# The fork (not npm's released 0.40.0) is the source of truth: it carries the
+# symlinked-setup-config fix (#1697) and the cch seeds through 2.1.252 (#1696)
+# that the release lacks, so `lore setup claude-code` works on Stow-symlinked
+# settings.json. lore-sync.sh treats this checkout as authoritative.
+#
+# No env is set here: LORE_DB_PATH is owned by rc.d/40-ai.sh (single authority).
+# This is a plain passthrough, like the hermes wrapper.
+exec node "$HOME/02_AREAS/B_Tech/ai/loreai/packages/gateway/dist/bin.cjs" "$@"
