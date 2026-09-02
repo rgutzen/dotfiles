@@ -1,31 +1,7 @@
 model:
-  default: anthropic/claude-opus-4.6
-  provider: auto
-  base_url: https://openrouter.ai/api/v1
-
-model_aliases:
-  qwen-thinking:
-    model: "qwen3:30b-a3b-thinking-2507-q4_K_M"
-    provider: custom
-    base_url: "http://localhost:11434/v1"
-  qwen-fast:
-    model: "qwen3:4b-instruct-2507-q4_K_M"
-    provider: custom
-    base_url: "http://localhost:11434/v1"
-
-# Cap context at 65536 for the local models. Hermes hard-requires >=64K
-# context and otherwise auto-detects/requests each model's full native
-# context (262144 tokens) — a waste of KV-cache memory on a GPU with only
-# ~31GB of GPU-addressable memory (GTT). 65536 is the smallest value that
-# still clears Hermes' floor.
-custom_providers:
-  - name: "ollama-local"
-    base_url: "http://localhost:11434/v1"
-    models:
-      "qwen3:30b-a3b-thinking-2507-q4_K_M":
-        context_length: 65536
-      "qwen3:4b-instruct-2507-q4_K_M":
-        context_length: 65536
+  default: qwen3:30b-a3b-thinking-2507-q4_K_M
+  provider: custom
+  base_url: http://localhost:11434/v1
 database:
   journal_mode: wal
 runtime:
@@ -127,6 +103,24 @@ updates:
   backup_keep: 5
   non_interactive_local_changes: stash
 _config_version: 39
+model_aliases:
+  qwen-thinking:
+    model: qwen3:30b-a3b-thinking-2507-q4_K_M
+    provider: custom
+    base_url: http://localhost:11434/v1
+  qwen-fast:
+    model: qwen3:4b-instruct-2507-q4_K_M
+    provider: custom
+    base_url: http://localhost:11434/v1
+custom_providers:
+  - name: ollama-local
+    base_url: http://localhost:11434/v1
+    models:
+      qwen3:30b-a3b-thinking-2507-q4_K_M:
+        context_length: 65536
+      qwen3:4b-instruct-2507-q4_K_M:
+        context_length: 65536
+    model: qwen3:30b-a3b-thinking-2507-q4_K_M
 session_reset:
   mode: none
   idle_minutes: 1440
