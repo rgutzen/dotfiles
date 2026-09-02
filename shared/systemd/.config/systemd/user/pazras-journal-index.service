@@ -6,12 +6,13 @@
 # mechanical step — see pazras-timers-gen.sh header.
 
 [Unit]
-Description=PAZRAS configuration validation
+Description=Rebuild the local embedding index over journal/ (D4, incremental)
+Documentation=file:%h/06_SYSTEM/agents/knowledge/operations/journal-index.md
 OnFailure=pazras-notify@%n.service
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/scripts/pazras-system validate
-Nice=19
+ExecStart=%h/06_SYSTEM/scripts/memory/pazras-memory journal index
+Nice=15
 IOSchedulingClass=idle

@@ -6,12 +6,13 @@
 # mechanical step — see pazras-timers-gen.sh header.
 
 [Unit]
-Description=PAZRAS configuration validation
+Description=System health check — stow links, derived-file drift, timer results, mounts
+Documentation=file:%h/06_SYSTEM/agents/knowledge/operations/healthcheck.md
 OnFailure=pazras-notify@%n.service
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/scripts/pazras-system validate
-Nice=19
+ExecStart=%h/06_SYSTEM/scripts/pazras-system healthcheck
+Nice=15
 IOSchedulingClass=idle

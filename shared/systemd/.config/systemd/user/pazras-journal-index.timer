@@ -6,12 +6,12 @@
 # mechanical step — see pazras-timers-gen.sh header.
 
 [Unit]
-Description=PAZRAS configuration validation
-OnFailure=pazras-notify@%n.service
+Description=Rebuild the local embedding index over journal/ (D4, incremental)
 
-[Service]
-Type=oneshot
-Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/scripts/pazras-system validate
-Nice=19
-IOSchedulingClass=idle
+[Timer]
+OnCalendar=*-*-* 06:15:00
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

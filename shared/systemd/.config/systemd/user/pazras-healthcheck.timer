@@ -6,12 +6,12 @@
 # mechanical step — see pazras-timers-gen.sh header.
 
 [Unit]
-Description=PAZRAS configuration validation
-OnFailure=pazras-notify@%n.service
+Description=System health check — stow links, derived-file drift, timer results, mounts
 
-[Service]
-Type=oneshot
-Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/scripts/pazras-system validate
-Nice=19
-IOSchedulingClass=idle
+[Timer]
+OnCalendar=Wed *-*-* 07:00:00
+Persistent=true
+RandomizedDelaySec=20m
+
+[Install]
+WantedBy=timers.target

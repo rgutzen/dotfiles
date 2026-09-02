@@ -189,13 +189,27 @@ else
 fi
 
 # ── systemd user timers ──────────────────────────────────────────────────
+# The enable list used to be hardcoded here, a second copy of a fact that
+# already lives in PAZRAS_TIMERS (06_SYSTEM/scripts/core/pazras-master-
+# config.sh) — the same hardcoded-list drift pazras-healthcheck now audits
+# for (agents/knowledge/operations/scheduled-processes.md). It had already
+# silently fallen behind: pazras-memory, pazras-lore-sync and pazras-reconcile
+# were enabled by hand and never added here. Source the config instead so
+# there is exactly one place a new scheduled process gets registered.
 if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; then
     echo
     echo "── timers ──"
     systemctl --user daemon-reload
-    for t in pazras-backup pazras-sync pazras-verify pazras-prune pazras-validate pazras-mirror; do
-        systemctl --user enable --now "$t.timer" >/dev/null 2>&1 && echo "  ✓ $t.timer"
-    done
+    PAZRAS_CONFIG="$HOME/06_SYSTEM/scripts/core/pazras-master-config.sh"
+    if [[ -f "$PAZRAS_CONFIG" ]]; then
+        # shellcheck disable=SC1090
+        source "$PAZRAS_CONFIG" >/dev/null 2>&1
+        for t in $(get_timer_units 2>/dev/null); do
+            systemctl --user enable --now "$t.timer" >/dev/null 2>&1 && echo "  ✓ $t.timer"
+        done
+    else
+        echo "  ! $PAZRAS_CONFIG not found — skipping (is 06_SYSTEM checked out?)"
+    fi
     # inbox-zero.service: not a timer, just a boot-time `docker compose up -d`
     # (containers already carry restart: always, so this mainly matters after
     # a full reboot). Only enable it if ~/.inbox-zero/.env exists — the compose
