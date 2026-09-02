@@ -1,5 +1,10 @@
 {
-  "model": "sonnet",
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:3207",
+    "DISABLE_AUTO_COMPACT": "1",
+    "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1"
+  },
+  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {
@@ -81,10 +86,5 @@
   "tui": "fullscreen",
   "theme": "dark",
   "agentPushNotifEnabled": true,
-  "voiceEnabled": true,
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://127.0.0.1:3207",
-    "DISABLE_AUTO_COMPACT": "1",
-    "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1"
-  }
+  "voiceEnabled": true
 }
