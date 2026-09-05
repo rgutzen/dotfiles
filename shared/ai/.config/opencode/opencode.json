@@ -5,7 +5,8 @@
     "@loreai/opencode",
     "@ex-machina/opencode-anthropic-auth@latest",
     "oh-my-opencode-slim",
-    "opencode-acp@latest"
+    "opencode-acp@latest",
+    "openslimedit@latest"
   ],
   "agent": {
     "explore": {
@@ -37,5 +38,10 @@
   },
   "compaction": {
     "auto": false
-  }
+  },
+  "instructions": [
+    "/home/rg/06_SYSTEM/agents/CONTEXT.md",
+    "/home/rg/06_SYSTEM/agents/user/user-identity.md",
+    "/home/rg/06_SYSTEM/agents/conventions/collaboration.md"
+  ]
 }

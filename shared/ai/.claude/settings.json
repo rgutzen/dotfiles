@@ -4,7 +4,7 @@
     "DISABLE_AUTO_COMPACT": "1",
     "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1"
   },
-  "model": "opus",
+  "model": "haiku",
   "hooks": {
     "PreToolUse": [
       {
@@ -13,6 +13,10 @@
           {
             "type": "command",
             "command": "[ -f ~/.claude/dippy-hook.disabled ] && exit 0; ~/04_RESOURCES/Templates/Dippy/bin/dippy-hook"
+          },
+          {
+            "type": "command",
+            "command": "rtk hook claude"
           }
         ]
       },
@@ -21,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/scripts/memory/pazras-guard",
+            "command": "$HOME/06_SYSTEM/scripts/boundaries/pazras-guard",
             "timeout": 5
           }
         ]
@@ -83,6 +87,11 @@
     }
   },
   "effortLevel": "high",
+  "modelSettings": {
+    "claude-sonnet-5": {
+      "effortLevel": "medium"
+    }
+  },
   "tui": "fullscreen",
   "theme": "dark",
   "agentPushNotifEnabled": true,
