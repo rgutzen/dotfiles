@@ -12,6 +12,11 @@ export OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true   # oh-my-opencode-slim
 # OpenAI and fail with "Incorrect API key provided: local-ollama".
 export LORE_UPSTREAM_LOCAL_OLLAMA=http://localhost:11434/v1
 
+# Pi names the same local server `ollama` (server root, NO /v1 — the gateway
+# appends API paths). Distinct key and URL shape from local-ollama above:
+# opencode uses `local-ollama`, Pi uses `ollama`; both must live together.
+export LORE_UPSTREAM_OLLAMA=http://localhost:11434
+
 # Lore's background workers (distill/curator) resolve their provider from a
 # bare model name defaulting to `anthropic`, while this machine's sessions
 # authenticate to deepseek — the lookup misses and both workers fail closed
