@@ -78,6 +78,9 @@ stt:
   openai:
     model: whisper-1
     language: ''
+plugins:
+  enabled:
+    - rtk-rewrite
 memory:
   memory_enabled: true
   user_profile_enabled: true

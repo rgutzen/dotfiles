@@ -13,6 +13,9 @@ accumulated over time.
     rse-mode.md      Research Software Engineer mode — the one custom command
                       that survived the audit (52 uses in history; everything
                       else tried once or never)
+    verify.md        Run the PAZRAS verification suite (validate, structure,
+                      boundaries, selftest) read-only
+    distill.md       Write this session into a journal entry (strict format)
   powerline/
     claude-powerline.json   Statusline theme (Thrifted Rug colours). Tracked
                       because settings.json's statusLine command points at it —
@@ -23,6 +26,9 @@ accumulated over time.
                              local-Ollama provider block (see "Local models" below)
   oh-my-opencode-slim.json   OMO config: DeepSeek preset, custom skill-specialist
                              agent, disabled agents (designer, council)
+  plugin/rtk.ts              Vendored RTK plugin shim — rewrites bash commands to
+                             `rtk <cmd>` via tool.execute.before. Requires the
+                             `rtk` binary (see "rtk" section below).
 .config/tweakcc/
   config.json                tweakcc settings (themes, tool toggles, misc flags).
                              Machine-specific state stays out: ccVersion and
@@ -35,7 +41,10 @@ accumulated over time.
 .hermes/
   config.yaml                Hermes config: default model, `model_aliases` and
                              `custom_providers` entries for the local Ollama
-                             models (see "Local models" below)
+                             models (see "Local models" below); enables the
+                             `rtk-rewrite` plugin
+  plugins/rtk-rewrite/       Vendored RTK Hermes plugin — `pre_tool_call` hook
+                             rewriting terminal commands to `rtk <cmd>`.
 ```
 
 ## What is deliberately *not* here
@@ -305,6 +314,29 @@ latest Claude Code, re-sync the corpus to whatever version you land on, and
 drop the pin. The corpus is version-specific — `--apply` re-creates any missing
 `.md` for the version it's pointed at, so an unpinned upgrade would silently
 regenerate cut files.
+
+### rtk (token-optimising CLI proxy)
+
+The `rtk` binary itself is **not vendored** — it is a single Rust binary that
+must be installed per machine, into `~/.local/bin/`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh
+# or, from the GitHub release asset (pinned, checksum-verified):
+#   rtk-x86_64-unknown-linux-musl.tar.gz  →  extract `rtk` →  ~/.local/bin/rtk
+rtk --version   # expect rtk 0.48.0 or newer
+```
+
+The *integration* is what is stowed: a `PreToolUse` hook in
+`settings.json`, the vendored `plugin/rtk.ts` for opencode, and the vendored
+`.hermes/plugins/rtk-rewrite/` for hermes. Every adapter delegates to
+`rtk rewrite`, so the rewrite rules live in the binary — updating rtk upgrades
+all three harnesses at once. Each adapter fails open (command passes through
+unchanged) when the binary is absent or errors.
+
+`openslimedit` (opencode tool-description compression, in `opencode.json`'s
+`plugin` array) is npm-managed, not vendored — it reinstalls from the registry
+the way the other `plugin:` entries do.
 
 ### 4. Hermes
 Hermes has its own installer and is **not** part of this dotfiles package —
