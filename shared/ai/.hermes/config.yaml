@@ -81,6 +81,18 @@ stt:
 plugins:
   enabled:
     - rtk-rewrite
+# pazras-memory capture -- Loop A for Hermes, mirrors the Claude Code
+# SessionEnd hook (~/.claude/settings.json) and the opencode/Pi session-end
+# hooks. Logs one line per session so a day spent in Hermes counts as ACTIVE
+# in the ranking. Does not stage a transcript (same limit as opencode/Pi).
+# hooks_auto_accept is required for non-interactive registration -- without
+# it, the first invocation after this file changes would block on a consent
+# prompt hermes has no TTY to show under a cron/alias invocation.
+hooks_auto_accept: true
+hooks:
+  on_session_end:
+    - command: "/home/rg/06_SYSTEM/scripts/memory/pazras-memory capture --harness=hermes --event=session-end"
+      timeout: 5
 memory:
   memory_enabled: true
   user_profile_enabled: true
