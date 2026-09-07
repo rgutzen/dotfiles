@@ -9,4 +9,3 @@ The canonical, private, cross-harness agent knowledge base lives at
 @~/06_SYSTEM/agents/user/user-identity.md
 @~/06_SYSTEM/agents/conventions/collaboration.md
 <!-- END GENERATED always-on -->
-
