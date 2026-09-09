@@ -12,7 +12,7 @@ OnFailure=pazras-notify@%n.service
 
 [Service]
 Type=oneshot
-Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=%h/.miniforge3/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/06_SYSTEM/scripts/pazras-system healthcheck
 Nice=15
 IOSchedulingClass=idle
