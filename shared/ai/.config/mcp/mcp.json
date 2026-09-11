@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "pazras-memory": {
+      "command": "/home/rg/06_SYSTEM/scripts/memory/pazras-memory-mcp"
+    }
+  }
+}
