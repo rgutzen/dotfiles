@@ -1,9 +1,11 @@
 {
   "theme": "omarchy-system",
-  "lastChangelogVersion": "0.85.0",
+  "lastChangelogVersion": "0.85.1",
   "packages": [
     "npm:@gotgenes/pi-permission-system",
-    "npm:pi-claude-bridge"
+    "npm:pi-claude-bridge",
+    "npm:pi-web-access",
+    "npm:pi-mcp-adapter"
   ],
   "defaultProvider": "ollama",
   "defaultModel": "qwen3:30b-a3b-thinking-2507-q4_K_M",

@@ -38,6 +38,12 @@
   "compaction": {
     "auto": false
   },
+  "mcp": {
+    "pazras-memory": {
+      "type": "local",
+      "command": ["/home/rg/06_SYSTEM/scripts/memory/pazras-memory-mcp"]
+    }
+  },
   "instructions": [
     "/home/rg/06_SYSTEM/agents/CONTEXT.md",
     "/home/rg/06_SYSTEM/agents/user/user-identity.md",
