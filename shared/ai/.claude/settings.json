@@ -2,7 +2,7 @@
   "env": {
     "DISABLE_AUTO_COMPACT": "1"
   },
-  "model": "haiku",
+  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {

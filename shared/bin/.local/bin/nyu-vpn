@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Launch the NYU AnyConnect client, clearing stale resolver state first.
+#
+# AnyConnect writes NYU's nameservers into systemd-resolved's global (ifindex 0)
+# scope and does not revert them when a tunnel dies uncleanly. With the tunnel
+# gone those servers are unreachable, so the next connect cannot resolve
+# vpn.nyu.edu and fails with "unsuccessful domain name resolution". The state is
+# runtime-only and owned by resolved, so nothing short of restarting resolved
+# clears it -- restarting NetworkManager does not.
+set -euo pipefail
+
+global_dns() { resolvectl dns | sed -n 's/^Global: *//p'; }
+
+if ip link show cscotun0 &>/dev/null; then
+    echo "nyu-vpn: tunnel is already up"
+    exit 0
+fi
+
+if [[ -n "$(global_dns)" ]]; then
+    echo "nyu-vpn: stale global resolver state ($(global_dns)), restarting systemd-resolved"
+    sudo systemctl restart systemd-resolved
+fi
+
+if ! getent hosts vpn.nyu.edu >/dev/null; then
+    echo "nyu-vpn: vpn.nyu.edu still does not resolve" >&2
+    exit 1
+fi
+
+exec /opt/cisco/anyconnect/bin/vpnui "$@"
