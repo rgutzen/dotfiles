@@ -2,7 +2,7 @@
   "env": {
     "DISABLE_AUTO_COMPACT": "1"
   },
-  "model": "opus",
+  "model": "haiku",
   "hooks": {
     "PreToolUse": [
       {
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/scripts/boundaries/pazras-guard",
+            "command": "$HOME/06_SYSTEM/engine/boundaries/pazras-guard",
             "timeout": 5
           }
         ]
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/scripts/memory/pazras-memory capture --harness=claude --event=skill-use"
+            "command": "$HOME/06_SYSTEM/engine/pazras context capture --harness=claude --event=skill-use"
           }
         ]
       }
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/scripts/memory/pazras-memory capture --harness=claude --event=session-end"
+            "command": "$HOME/06_SYSTEM/engine/pazras context capture --harness=claude --event=session-end"
           }
         ]
       }
