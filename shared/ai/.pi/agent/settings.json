@@ -1,6 +1,6 @@
 {
   "theme": "omarchy-system",
-  "lastChangelogVersion": "0.87.1",
+  "lastChangelogVersion": "0.99.2",
   "packages": [
     "npm:@gotgenes/pi-permission-system",
     "npm:pi-claude-bridge",
@@ -11,5 +11,8 @@
   "defaultModel": "qwen3:30b-a3b-thinking-2507-q4_K_M",
   "compaction": {
     "enabled": false
-  }
+  },
+  "extensions": [
+    "-builtin:mcp"
+  ]
 }

@@ -190,7 +190,7 @@ fi
 
 # ── systemd user timers ──────────────────────────────────────────────────
 # The enable list used to be hardcoded here, a second copy of a fact that
-# already lives in PAZRAS_TIMERS (06_SYSTEM/scripts/structure/pazras-master-
+# already lives in PAZRAS_TIMERS (06_SYSTEM/engine/structure/pazras-master-
 # config.sh) — the same hardcoded-list drift pazras-healthcheck now audits
 # for (agents/knowledge/system/schedule/scheduled-processes.md). It had already
 # silently fallen behind: pazras-memory, pazras-lore-sync and pazras-reconcile
@@ -200,7 +200,7 @@ if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; the
     echo
     echo "── timers ──"
     systemctl --user daemon-reload
-    PAZRAS_CONFIG="$HOME/06_SYSTEM/scripts/structure/pazras-master-config.sh"
+    PAZRAS_CONFIG="$HOME/06_SYSTEM/config/structure/pazras-master-config.sh"
     if [[ -f "$PAZRAS_CONFIG" ]]; then
         # shellcheck disable=SC1090
         source "$PAZRAS_CONFIG" >/dev/null 2>&1

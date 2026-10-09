@@ -42,7 +42,7 @@
     "pazras-memory": {
       "type": "local",
       "command": [
-        "/home/rg/06_SYSTEM/scripts/memory/pazras-memory-mcp"
+        "/home/rg/06_SYSTEM/engine/cli/pazras-memory-mcp"
       ]
     }
   },
