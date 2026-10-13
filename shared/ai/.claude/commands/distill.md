@@ -1,7 +1,7 @@
 # Distill this session into a journal entry
 
 Write one journal entry for the session we are in, into
-`~/06_SYSTEM/agents/journal/YYYY/MM/YYYY-MM-DD_short-slug.md`, following the
+`~/06_SYSTEM/memory/journal/YYYY/MM/YYYY-MM-DD_short-slug.md`, following the
 house format exactly.
 
 ## Format (strict)
