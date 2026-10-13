@@ -364,6 +364,6 @@ git config --global commit.gpgsign true
 gpg --armor --export <key-id> | gh gpg-key add -
 ```
 Do this on the new machine only — like SSH, a signing key shouldn't travel
-from the old one. See `pazras-system/MIGRATION-PLAN.md` §6.1 for the SSH-key
+from the old one. See the private repo's `MIGRATION-PLAN.md` §6.1 for the SSH-key
 half of this (same "generate fresh, verify, then revoke the old" sequencing
 applies to both).
