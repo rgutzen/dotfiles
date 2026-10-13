@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/engine/boundaries/wards.py",
+            "command": "$HOME/06_SYSTEM/engine/boundaries/guard.py",
             "timeout": 5
           }
         ]

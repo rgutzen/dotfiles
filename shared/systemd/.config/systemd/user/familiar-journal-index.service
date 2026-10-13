@@ -13,6 +13,6 @@ OnFailure=notify@%n.service
 [Service]
 Type=oneshot
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/engine/pazras knowledge journal index
+ExecStart=%h/06_SYSTEM/engine/familiar knowledge journal index
 Nice=15
 IOSchedulingClass=idle
