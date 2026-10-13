@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "pazras-memory": {
-      "command": "/home/rg/06_SYSTEM/engine/cli/pazras-memory-mcp"
+    "familiar-mcp": {
+      "command": "/home/rg/06_SYSTEM/engine/cli/familiar-mcp.sh"
     }
   }
 }

@@ -6,11 +6,11 @@ result; a green systemd timer means the timer fired, not that the service
 succeeded, so check `systemctl --user status` for anything suspicious.
 
 ```bash
-pazras-system validate
-pazras-system structure --check
-pazras-system status
-scripts/boundaries/boundaries-compile --check
-scripts/memory/pazras-memory selftest --parity
+familiar structure validate
+familiar structure generate --check
+familiar structure status
+engine/boundaries/compile.py --check
+familiar checks selftest --signals
 ```
 
 If any command exits non-zero or reports drift (structure `--check` = 3),

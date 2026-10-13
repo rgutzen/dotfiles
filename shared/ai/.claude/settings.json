@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/engine/boundaries/pazras-guard",
+            "command": "$HOME/06_SYSTEM/engine/boundaries/wards.py",
             "timeout": 5
           }
         ]
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/engine/pazras context capture --harness=claude --event=skill-use"
+            "command": "$HOME/06_SYSTEM/engine/familiar context capture --harness=claude --event=skill-use"
           }
         ]
       }
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/06_SYSTEM/engine/pazras context capture --harness=claude --event=session-end"
+            "command": "$HOME/06_SYSTEM/engine/familiar context capture --harness=claude --event=session-end"
           }
         ]
       }

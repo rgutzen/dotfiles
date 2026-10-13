@@ -39,16 +39,16 @@
     "auto": false
   },
   "mcp": {
-    "pazras-memory": {
+    "familiar-mcp": {
       "type": "local",
       "command": [
-        "/home/rg/06_SYSTEM/engine/cli/pazras-memory-mcp"
+        "/home/rg/06_SYSTEM/engine/cli/familiar-mcp.sh"
       ]
     }
   },
   "instructions": [
-    "/home/rg/06_SYSTEM/agents/CONTEXT.md",
-    "/home/rg/06_SYSTEM/agents/user/user-identity.md",
-    "/home/rg/06_SYSTEM/agents/conventions/collaboration.md"
+    "/home/rg/06_SYSTEM/CONTEXT.md",
+    "/home/rg/06_SYSTEM/config/practice/user/user-identity.md",
+    "/home/rg/06_SYSTEM/config/practice/conventions/collaboration.md"
   ]
 }
