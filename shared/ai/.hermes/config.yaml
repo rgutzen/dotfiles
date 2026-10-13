@@ -103,10 +103,10 @@ plugins:
 # drops comments (verified 2026-09-11, L1) -- re-add them if they vanish again.
 hooks:
   on_session_end:
-    - command: /home/rg/06_SYSTEM/engine/pazras context capture --harness=hermes
+    - command: /home/rg/06_SYSTEM/engine/familiar context capture --harness=hermes
         --event=session-end
       timeout: 5
-    - command: /home/rg/06_SYSTEM/engine/pazras context hermes-session
+    - command: /home/rg/06_SYSTEM/engine/familiar context hermes-session
       timeout: 5
 hooks_auto_accept: true
 kanban:
@@ -171,8 +171,8 @@ platform_toolsets:
   google_chat:
     - hermes-google_chat
 mcp_servers:
-  pazras-memory:
-    command: /home/rg/06_SYSTEM/engine/cli/pazras-memory-mcp
+  familiar-mcp:
+    command: /home/rg/06_SYSTEM/engine/cli/familiar-mcp.sh
     enabled: true
 
 # ── Security ──────────────────────────────────────────────────────────
