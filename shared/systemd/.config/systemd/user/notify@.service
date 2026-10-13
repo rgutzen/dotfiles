@@ -1,4 +1,4 @@
-# OnFailure handler for every PAZRAS unit.
+# OnFailure handler for every scheduled unit of this system.
 #
 # Finding #1 was not a bad backup tool — it was a backup that silently never
 # ran and nothing said so. Automation without failure surfacing does not
