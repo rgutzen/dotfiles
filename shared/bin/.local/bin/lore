@@ -10,5 +10,5 @@
 # set for every lore invocation — dbPath() falls back to ~/.local/share/lore/lore.db
 # when unset, silently opening a second, empty DB. `lore recall` queries the DB
 # directly (no gateway), so this is the only path that needs the pin.
-export LORE_DB_PATH="$HOME/06_SYSTEM/agents/loredb/lore.db"
+export LORE_DB_PATH="$HOME/06_SYSTEM/memory/loredb/lore.db"
 exec node "$HOME/02_AREAS/B_Tech/ai/loreai/packages/gateway/dist/bin.cjs" "$@"
