@@ -84,7 +84,7 @@
         "mcps": []
       },
       "librarian": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": [
           "websearch",
@@ -93,17 +93,17 @@
         ]
       },
       "explorer": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": []
       },
       "fixer": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": []
       },
       "observer": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": []
       }
@@ -134,7 +134,7 @@
         "mcps": []
       },
       "librarian": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": [
           "websearch",
@@ -143,17 +143,17 @@
         ]
       },
       "explorer": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": []
       },
       "fixer": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": []
       },
       "observer": {
-        "model": "deepseek/deepseek-v4-flash",
+        "model": "deepseek/deepseek-flash",
         "skills": [],
         "mcps": []
       }
@@ -217,7 +217,7 @@
     "hermes": {
       "command": "hermes",
       "args": ["acp"],
-      "wrapperModel": "deepseek/deepseek-v4-flash",
+      "wrapperModel": "deepseek/deepseek-flash",
       "timeoutMs": 300000,
       "permissionMode": "allow",
       "description": "Hermes Agent — messaging (Signal), web search, browser automation, cron scheduling, voice mode, home automation. Persistent autonomous agent that learns across sessions.",
