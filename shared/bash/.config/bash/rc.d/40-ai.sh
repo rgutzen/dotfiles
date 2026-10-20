@@ -18,3 +18,24 @@ export OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true   # oh-my-opencode-slim
 # cuts it to ~5k tokens (confirmed: 4+ min -> ~14s per turn).
 alias hermes-fast='hermes --ignore-rules -t file,terminal -m qwen-fast'
 alias hermes-think='hermes --ignore-rules -t file,terminal -m qwen-thinking'
+
+# `pi` picks its billing profile from the directory. The nearest `.pi-profile`
+# at or above $PWD names a profile; `pi` then runs `pi-<profile>` (see
+# pi-profile). The marker lives in the work tree, so no company name enters
+# these dotfiles. `command pi` bypasses it.
+pi() {
+    local dir="$PWD" profile
+    while [ "$dir" != / ]; do
+        if [ -r "$dir/.pi-profile" ]; then
+            read -r profile < "$dir/.pi-profile"
+            if command -v "pi-$profile" >/dev/null 2>&1; then
+                command "pi-$profile" "$@"
+                return
+            fi
+            echo "pi: $dir/.pi-profile names '$profile', but pi-$profile is not installed; running personal pi" >&2
+            break
+        fi
+        dir="${dir%/*}"; [ -z "$dir" ] && dir=/
+    done
+    command pi "$@"
+}
