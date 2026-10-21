@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Refresh Pi's model catalog and show what each provider ID now offers.
+#
+# Alias providers (deepseek-teres, …) need no regeneration: the
+# provider-aliases extension copies the base provider's models on every start.
+# This command only forces the catalog refresh Pi otherwise does on its own.
+set -euo pipefail
+
+pi update --models
+pi --list-models | awk 'NR > 1 { n[$1]++ } END { for (p in n) printf "%-16s %3d models\n", p, n[p] }' | sort
