@@ -2,7 +2,9 @@
 # Run Pi under a billing profile. Installed as symlinks named pi-<profile>
 # (pi-teres -> pi-profile); the profile is the part of the name after "pi-".
 #
-#   pi-<profile> login     sign in once to that profile's Claude account
+#   pi-<profile> login     sign in once to that profile's Claude account; words
+#                          after it go to `claude auth login`, so `pi-teres login
+#                          --sso` or `--email me@work.example` work
 #   pi-<profile> status    show which Claude account the profile resolves to
 #   pi-<profile> [args]    pi under the profile, args passed through
 #
@@ -14,6 +16,8 @@
 #     in ~/.claude-<profile>.
 #   - API keys: for every <KEY>_<PROFILE> variable, the personal <KEY> is unset,
 #     so the personal provider ID drops out of /model.
+#   - Nothing else gets in: an exported ANTHROPIC_* credential or base URL, or
+#     CLAUDE_CODE_OAUTH_TOKEN, outranks the login the profile just chose.
 #   - PI_PROFILE: the provider-aliases extension moves the session's model to
 #     the <provider>-<profile> alias.
 #
@@ -25,6 +29,8 @@
 # New profile: omit the Omarchy account, export <KEY>_<PROFILE> keys in
 # ~/.config/bash/local.sh, then
 #   ln -s pi-profile ~/02_AREAS/B_Tech/dotfiles/shared/bin/.local/bin/pi-<profile>
+# A subscription provider (Claude) needs no key at all: sign it in with
+# `pi-<profile> login`.
 set -euo pipefail
 
 profile="$(basename "$0")"
@@ -68,13 +74,23 @@ else
 fi
 claude_home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
+# Exported Anthropic auth outranks the Claude login the profile just picked: an
+# API key bills the API, ANTHROPIC_BASE_URL bills a gateway, and claude-code's own
+# OAuth token skips the config dir. Any of them makes the profile name a lie, so
+# say it instead of running quietly against the wrong account.
+for override in ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN; do
+    if [[ -n "${!override:-}" ]]; then
+        echo "pi-$profile: $override is exported and overrides the $profile Claude login" >&2
+    fi
+done
+
 case "${1:-}" in
     login)
         if [[ "$claude_source" == omarchy* ]]; then
             echo "pi-$profile: ${profile^} is an Omarchy account, so its login is Omarchy's." >&2
             echo "pi-$profile: add or repair it with: omarchy agent account add claude ${profile^}" >&2
         fi
-        exec claude auth login
+        exec claude auth login "${@:2}"
         ;;
     status)
         printf 'profile      %s\n' "$profile"
