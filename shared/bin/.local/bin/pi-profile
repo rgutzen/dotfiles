@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Run Pi under a billing profile. Installed as symlinks named pi-<profile>
+# (pi-teres -> pi-profile); the profile is the part of the name after "pi-".
+#
+#   pi-<profile> login     sign in once to that profile's Claude account
+#   pi-<profile> status    show which Claude account the profile resolves to
+#   pi-<profile> [args]    pi under the profile, args passed through
+#
+# A profile changes three things for the whole Pi process:
+#   - Claude: the subscription account. If Omarchy knows an account whose id is
+#     the profile name (omarchy agent account add claude Teres), Pi uses that
+#     account's config home, so Claude history, settings and skills are the one
+#     shared set Omarchy maintains. Otherwise the profile keeps a private login
+#     in ~/.claude-<profile>.
+#   - API keys: for every <KEY>_<PROFILE> variable, the personal <KEY> is unset,
+#     so the personal provider ID drops out of /model.
+#   - PI_PROFILE: the provider-aliases extension moves the session's model to
+#     the <provider>-<profile> alias.
+#
+# The directory decides which profile runs (see 40-ai.sh: a .pi-profile file
+# names it). That deliberately overrides Omarchy's machine-wide active account:
+# the nearest profile wins, and omarchy agent account use stays for everything
+# launched outside a marked directory.
+#
+# New profile: omit the Omarchy account, export <KEY>_<PROFILE> keys in
+# ~/.config/bash/local.sh, then
+#   ln -s pi-profile ~/02_AREAS/B_Tech/dotfiles/shared/bin/.local/bin/pi-<profile>
+set -euo pipefail
+
+profile="$(basename "$0")"
+profile="${profile#pi-}"
+if [[ "$profile" == profile || -z "$profile" ]]; then
+    echo "pi-profile: call through a pi-<profile> symlink, e.g. pi-teres" >&2
+    exit 2
+fi
+suffix="_${profile^^}"
+
+export PI_PROFILE="$profile"
+
+# The config home of the Omarchy account named like this profile. Prints
+# nothing when Omarchy has no registry, no claude entry, or no such account.
+omarchy_claude_home() {
+    command -v omarchy >/dev/null 2>&1 || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+    local json
+    json=$(timeout 5 omarchy agent account list 2>/dev/null) || return 1
+    jq -er --arg id "$profile" '
+        (if type == "array" then .[] else . end)
+        | select(.provider == "claude")
+        | .accounts[]
+        | select((.id | ascii_downcase) == ($id | ascii_downcase))
+        | .home' <<<"$json"
+}
+
+# Claude keeps ~/.claude.json beside the default home and $DIR/.claude.json
+# inside any other, so the primary account must stay implicit: pointing the
+# variable at ~/.claude would make Claude look for a login that is not there.
+if omarchy_home=$(omarchy_claude_home); then
+    claude_source="omarchy account $profile"
+    if [[ "$omarchy_home" == "$HOME/.claude" ]]; then
+        unset CLAUDE_CONFIG_DIR
+    else
+        export CLAUDE_CONFIG_DIR="$omarchy_home"
+    fi
+else
+    claude_source="profile home"
+    export CLAUDE_CONFIG_DIR="$HOME/.claude-$profile"
+fi
+claude_home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+
+case "${1:-}" in
+    login)
+        if [[ "$claude_source" == omarchy* ]]; then
+            echo "pi-$profile: ${profile^} is an Omarchy account, so its login is Omarchy's." >&2
+            echo "pi-$profile: add or repair it with: omarchy agent account add claude ${profile^}" >&2
+        fi
+        exec claude auth login
+        ;;
+    status)
+        printf 'profile      %s\n' "$profile"
+        printf 'claude home  %s%s\n' "$claude_home" \
+            "$([[ -n "${CLAUDE_CONFIG_DIR:-}" ]] || echo " (implicit)")"
+        printf 'claude from  %s\n' "$claude_source"
+        exec claude auth status
+        ;;
+esac
+
+while IFS= read -r name; do
+    unset "${name%"$suffix"}"
+done < <(compgen -e | grep -- "$suffix\$" || true)
+
+if [[ ! -f "$claude_home/.credentials.json" ]]; then
+    echo "pi-$profile: no Claude login in $claude_home — Claude models unavailable" >&2
+    if [[ "$claude_source" == omarchy* ]]; then
+        echo "pi-$profile: sign ${profile^} in with: omarchy agent account add claude ${profile^}" >&2
+    else
+        echo "pi-$profile: sign in with: pi-$profile login" >&2
+    fi
+fi
+
+exec pi "$@"
