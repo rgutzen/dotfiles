@@ -6,7 +6,7 @@
 # mechanical step — see timers-gen.sh header.
 
 [Unit]
-Description=Push restic repo deltas to Proton and BigFish
+Description=Push restic repo deltas to the configured remotes
 
 [Timer]
 OnCalendar=*-*-* 04:30:00
