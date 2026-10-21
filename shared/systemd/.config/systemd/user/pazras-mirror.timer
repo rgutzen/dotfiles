@@ -6,7 +6,7 @@
 # mechanical step — see timers-gen.sh header.
 
 [Unit]
-Description=Publish browsable PAZRAS mirror to Proton Drive
+Description=Publish a browsable PAZRAS mirror to the off-site provider
 
 [Timer]
 OnCalendar=Sat *-*-* 02:00:00

@@ -6,13 +6,13 @@
 # mechanical step — see timers-gen.sh header.
 
 [Unit]
-Description=Publish browsable PAZRAS mirror to Proton Drive
+Description=Publish a browsable PAZRAS mirror to the off-site provider
 OnFailure=notify@%n.service
 
 [Service]
 Type=oneshot
 Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/engine/backup/proton-mirror.sh
+ExecStart=%h/06_SYSTEM/engine/backup/mirror.sh
 Nice=19
 IOSchedulingClass=idle
 TimeoutStartSec=12h
