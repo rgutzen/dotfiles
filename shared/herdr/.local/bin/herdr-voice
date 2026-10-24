@@ -2,15 +2,22 @@
 # herdr-voice — Voxtype post-process hook: spoken herdr commands, else dictation.
 #
 # Voxtype pipes the transcript to stdin and types whatever this prints. A
-# transcript that opens with the word "herdr" — spelled as the recogniser heard
-# it, within a small edit distance — and a known verb runs the herdr CLI and
-# prints nothing, so nothing is typed. Everything else is echoed unchanged and
-# typed at the cursor.
+# transcript that opens with the wake word and a known verb runs the herdr CLI
+# and prints nothing, so nothing is typed. Everything else is echoed unchanged
+# and typed at the cursor.
 #
-#   herdr new space <name>   herdr workspace create --label <name>
-#   herdr pair <agent>       herdr-layout pair <agent>
-#   herdr watch <view>       herdr-layout watch <view>
-#   herdr layout <profile>   herdr-layout <profile> (edit|pair|git|watch)
+#   <wake> new space <name>   herdr workspace create --label <name>
+#   <wake> pair <agent>       herdr-layout pair <agent>
+#   <wake> watch <view>       herdr-layout watch <view>
+#   <wake> layout <profile>   herdr-layout <profile>
+#
+# Two wake words, and the second one exists because of measurement. The
+# recogniser has no custom vocabulary and "herdr" is not a word: eleven
+# dictations of one command produced Hurder, Header, Harder, Heather, hurdle
+# and "Right or in use", losing the verb along the way in half of them. Every
+# variant mangled the /h/ onset. "beacon" is a real word with a /b/ onset, so
+# the model spells it back correctly; "herdr" stays accepted for the spellings
+# that come close. Override the alias with HERDR_VOICE_WAKE (space separated).
 #
 # Session: $HERDR_VOICE_SESSION, else the first running of personal, work,
 # default (the daemon has no herdr context of its own).
@@ -20,9 +27,12 @@ set -uo pipefail
 
 herdr_bin=${HERDR_BIN_PATH:-herdr}
 transcript=$(cat)
+wake=${HERDR_VOICE_WAKE:-beacon}
 
-# Speech-to-text capitalises and punctuates: "Herdr, new space Dotfiles."
-words=$(printf '%s' "$transcript" | tr '[:upper:]' '[:lower:]' | tr -d '[:punct:]')
+# Matching copy only, never echoed: lowercased, with every run of
+# non-alphanumerics turned into ONE space. Deleting punctuation instead — as
+# this did at first — fuses "space.file" into "spacefile" and loses the verb.
+words=$(printf '%s' "$transcript" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' ' ')
 read -r -a w <<<"$words"
 
 passthrough() {
@@ -30,10 +40,6 @@ passthrough() {
     exit 0
 }
 
-# The recogniser has no custom vocabulary here, so it writes the wake word as it
-# hears it: "Herder", "hearder", "heard her". Match the leading word(s) by edit
-# distance instead of demanding the spelling — and let the verb gate below do
-# the rest of the filtering, so a stray near-match simply falls through.
 lev() { # <a> <b> -> edit distance
     printf '%s\n%s\n' "$1" "$2" | awk '
         NR==1 { al=length($0); for (i=1;i<=al;i++) a[i]=substr($0,i,1) }
@@ -53,28 +59,41 @@ lev() { # <a> <b> -> edit distance
 }
 
 # How many leading tokens spell the wake word: 1 normally, 2 when it was heard
-# as two words ("heard her"). Tolerance grows with the candidate's length, and
-# deliberately stays tight for short ones — "heard" alone is a real word, and a
-# loose match there would eat the first token of an ordinary sentence.
-offset=0
-for n in 1 2; do
-    cand=""
-    for ((k = 0; k < n; k++)); do cand+=${w[k]:-}; done
-    [[ -n $cand ]] || continue
-    if ((n == 2)); then
-        max=3
-    elif ((${#cand} >= 6)); then
-        max=2
-    else
-        max=1
-    fi
-    if (($(lev "$cand" herdr) <= max)); then
-        offset=$n
-        break
-    fi
-done
-((offset)) || passthrough
-v=("${w[@]:offset}")
+# as two words ("heard her", "hurder new"). Tolerance grows with length and
+# deliberately stays tight for short candidates — "heard" alone is a real word,
+# and a loose match there would eat the first token of an ordinary sentence.
+# The verb gate below rejects the rest, so a near-match costs a typed sentence
+# only when it is also followed by a herdr verb.
+wake_offset=0
+wake_exact=0
+find_wake() {
+    local n cand k max t d
+    for n in 1 2; do
+        cand=""
+        for ((k = 0; k < n; k++)); do cand+=${w[k]:-}; done
+        [[ -n $cand ]] || continue
+        ((${#cand} <= 10)) || continue
+        if ((n == 2)); then
+            max=3
+        elif ((${#cand} >= 6)); then
+            max=2
+        else
+            max=1
+        fi
+        for t in herdr "$wake"; do
+            d=$(lev "$cand" "$t")
+            if ((d <= max)); then
+                wake_offset=$n
+                ((d == 0)) && wake_exact=1
+                return 0
+            fi
+        done
+    done
+    return 1
+}
+
+find_wake || passthrough
+v=("${w[@]:wake_offset}")
 
 session() {
     [[ -n ${HERDR_VOICE_SESSION:-} ]] && { echo "$HERDR_VOICE_SESSION"; return; }
@@ -85,6 +104,11 @@ session() {
     done
 }
 
+notify() {
+    [[ -n ${HERDR_VOICE_DRY:-} ]] && { echo "herdr-voice: $*" >&2; return 0; }
+    notify-send -a herdr-voice "herdr-voice" "$*" 2>/dev/null
+}
+
 run() {
     local s
     s=$(session)
@@ -93,7 +117,7 @@ run() {
         echo "herdr-voice: $*" >&2
         return 0
     fi
-    "$@" >/dev/null 2>&1 || notify-send -a herdr-voice "herdr-voice" "failed: ${words}" 2>/dev/null
+    "$@" >/dev/null 2>&1 || notify "failed: ${words}"
 }
 
 layout() { # <profile> [arg]
@@ -110,29 +134,76 @@ layout() { # <profile> [arg]
     printf '#!/bin/sh\nexec %q%s "$@"\n' "$herdr_bin" "${s:+ --session $s}" >"$wrapper/herdr"
     chmod +x "$wrapper/herdr"
     HERDR_BIN_PATH=$wrapper/herdr herdr-layout "$@" >/dev/null 2>&1 ||
-        notify-send -a herdr-voice "herdr-voice" "failed: ${words}" 2>/dev/null
+        notify "failed: ${words}"
 }
 
-case "${v[0]:-} ${v[1]:-}" in
-"new space")
-    name=${v[*]:2}
+# A space label is a name the recogniser will mangle, and a create with a
+# mangled label silently makes a second, differently named space. Known labels
+# are matched case-insensitively; an exact hit refuses the duplicate rather
+# than making one.
+space_exists() { # <label> -> 0 when a space already carries it
+    local s labels
+    s=$(session) || return 1
+    labels=$("$herdr_bin" --session "$s" workspace list 2>/dev/null |
+        jq -r '.result.workspaces[].label // empty' 2>/dev/null |
+        tr '[:upper:]' '[:lower:]')
+    grep -Fxq "$1" <<<"$labels"
+}
+
+# pick <spoken> <candidate...> -> the closest candidate, or nothing. The closed
+# vocabularies (a watch view, a layout profile) are where voice is reliable:
+# a handful of known words survive a mangled syllable, and anything that does
+# not match falls through to typing instead of running a guess.
+pick() {
+    local spoken=$1 c best="" bestd=99 d lim=2
+    shift
+    ((${#spoken} >= 6)) && lim=3
+    for c in "$@"; do
+        d=$(lev "$spoken" "$c")
+        ((d <= lim && d < bestd)) && { best=$c; bestd=$d; }
+    done
+    [[ -n $best ]] && printf '%s' "$best"
+}
+
+case ${v[0]:-} in
+new | news | newspace | space)
+    # "new space <name>" is three tokens the recogniser routinely fuses into
+    # "newspace" or "Newsbase"; accept both shapes, and "space" alone.
+    #
+    # The one command with a free-form argument, so it demands the wake word
+    # verbatim: a fuzzy match ("Hurder", "Heard a") plus a guessed name is how
+    # a space ends up called "based-upon". Closed vocabularies below validate
+    # their argument instead, so they accept the fuzzy wake.
+    ((wake_exact)) || passthrough
+    i=1
+    [[ ${v[1]:-} == space ]] && i=2
+    name=${v[*]:i}
     [[ -n $name ]] || passthrough
-    run herdr workspace create --label "${name// /-}"
+    label=${name// /-}
+    if space_exists "$label"; then
+        notify "space already exists: $label"
+        exit 0
+    fi
+    run herdr workspace create --label "$label"
+    # The label is the one argument voice cannot be trusted with: "dotfiles"
+    # arrives as ".file", "files" or "dot files". Say what was heard, so a wrong
+    # name is visible at once and renameable with prefix+shift+r.
+    [[ -z ${HERDR_VOICE_DRY:-} ]] && notify "created space: $label"
     ;;
-*)
-    case ${v[0]:-} in
-    pair) layout pair "${v[1]:-}" ;;
-    watch)
-        view=${v[1]:-}
-        [[ $view == schedule ]] && view=sessions
-        layout watch "$view"
-        ;;
-    layout)
-        [[ -n ${v[1]:-} ]] || passthrough
-        layout "${v[1]}"
-        ;;
-    *) passthrough ;;
-    esac
+pair | pairs)
+    layout pair "${v[1]:-}"
     ;;
+watch | watches)
+    [[ ${v[1]:-} == schedule ]] && { layout watch sessions; exit 0; }
+    view=$(pick "${v[1]:-}" todos sessions git status)
+    [[ -n $view ]] || passthrough
+    layout watch "$view"
+    ;;
+layout | layouts)
+    profile=$(pick "${v[1]:-}" edit pair git watch)
+    [[ -n $profile ]] || passthrough
+    layout "$profile"
+    ;;
+*) passthrough ;;
 esac
 exit 0
