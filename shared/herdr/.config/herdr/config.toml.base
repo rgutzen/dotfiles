@@ -150,12 +150,16 @@ tab_bar_right = [
 window_title = "{hostname}: {workspace}"
 
 # Desktop notifications when a background agent blocks or finishes, and a sound
-# for the same event. Both are muted while that agent is focused.
+# for the same event. Both are muted while that agent is focused. The sound is
+# off: the toast carries the state, and a machine running several agents does not
+# need to announce every transition. `[ui.sound]` also takes `path`,
+# `done_path` and `request_path` (mp3), and `[ui.sound.agents]` turns one agent
+# back on; HERDR_DISABLE_SOUND=1 is the same switch from the environment.
 [ui.toast]
 delivery = "system"
 
 [ui.sound]
-enabled = true
+enabled = false
 
 # Two rows per agent: state and task on the first, the pane's own title on the
 # second. `terminal_title_stripped` is what pi writes (π - <topic> - <dir>), so
