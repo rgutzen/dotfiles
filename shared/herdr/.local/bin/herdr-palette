@@ -28,7 +28,7 @@ log=${HERDR_FRICTION_LOG:-$HOME/.local/state/herdr/friction.log}
 wake=$(herdr-voice --wake 2>/dev/null) || wake=beacon
 actions=(
 "layout: edit tab|c:herdr-layout|$wake layout edit|herdr-layout edit"
-"layout: pair (pi agent beside)|-|$wake pair <agent>|herdr-layout pair"
+"layout: pair (pi agent beside)|-|$wake pair <agent>|!pair"
 "layout: git tab|-|$wake layout git|herdr-layout git"
 "layout: watch tab|-|$wake watch <view>|herdr-layout watch todos"
 "new space|k:new_workspace|$wake new space <name>|!new_space"
@@ -110,13 +110,28 @@ wanted() {
     printf '%s [%s] wanted: %s\n' "$(date '+%Y-%m-%d %H:%M')" "$(current_space)" "$text" >>"$log"
 }
 
+# Agents are picked, never remembered: the list comes from herdr itself, so a
+# paired agent is addressable by choosing its row rather than by holding its
+# name in your head. Prints the name, else the pane id.
+pick_agent() {
+    local sel
+    sel=$("$herdr_bin" agent list 2>/dev/null |
+        jq -r '.result.agents[] | [(.name // "-"), .pane_id, .agent_status, (.cwd // "-")] | @tsv' |
+        fzf --delimiter=$'\t' --with-nth=1,2,3,4 --prompt='agent> ' \
+            --header='name | pane | state | cwd') || return 1
+    awk -F'\t' '{print ($1=="-" ? $2 : $1)}' <<<"$sel"
+}
+
 run_interactive() {
     local id=$1 a b
     case $id in
     new_space) a=$(ask "space name"); [[ -z $a ]] || "$herdr_bin" workspace create --label "${a// /-}" ;;
     worktree) a=$(ask "branch"); [[ -z $a ]] || "$herdr_bin" worktree create --branch "$a" ;;
-    agent_prompt) a=$(ask "agent"); b=$(ask "prompt"); [[ -z $a || -z $b ]] || "$herdr_bin" agent prompt "$a" "$b" ;;
-    agent_read) a=$(ask "agent"); [[ -z $a ]] || "$herdr_bin" agent read "$a" | ${PAGER:-less} ;;
+    # pair asks for the name first, because the name is the identity you address
+    # later; Enter keeps the default rather than leaving the agent unnamed.
+    pair) a=$(ask "agent name [pi-impl]"); herdr-layout pair "${a:-pi-impl}" ;;
+    agent_prompt) a=$(pick_agent) || return 0; b=$(ask "prompt"); [[ -z $a || -z $b ]] || "$herdr_bin" agent prompt "$a" "$b" ;;
+    agent_read) a=$(pick_agent) || return 0; [[ -z $a ]] || "$herdr_bin" agent read "$a" | ${PAGER:-less} ;;
     session_restart) a=$(ask "context (personal|work)"); [[ -z $a ]] || herdr-session "$a" --restart ;;
     help) "$herdr_bin" --help | ${PAGER:-less} ;;
     wanted) wanted ;;
