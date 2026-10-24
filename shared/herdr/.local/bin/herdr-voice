@@ -11,13 +11,15 @@
 #   <wake> watch <view>       herdr-layout watch <view>
 #   <wake> layout <profile>   herdr-layout <profile>
 #
-# Two wake words, and the second one exists because of measurement. The
-# recogniser has no custom vocabulary and "herdr" is not a word: eleven
-# dictations of one command produced Hurder, Header, Harder, Heather, hurdle
-# and "Right or in use", losing the verb along the way in half of them. Every
-# variant mangled the /h/ onset. "beacon" is a real word with a /b/ onset, so
-# the model spells it back correctly; "herdr" stays accepted for the spellings
-# that come close. Override the alias with HERDR_VOICE_WAKE (space separated).
+# The wake word is chosen by measurement, twice over. "herdr" is not a word:
+# eleven dictations of one command produced Hurder, Header, Harder, Heather,
+# hurdle and "Right or in use", none dispatching; there the onset survived
+# and the rhyme was replaced, so a wake word must be a whole token the decoder
+# already knows. "beacon" (b/ onset) spelled back correctly, but "cauldron"
+# dispatched 16 of 20 and is easier to say, so it is the default; "beacon" is
+# dropped rather than kept as a low-probability alias. "herdr" stays accepted
+# for the spellings that come close. Override with HERDR_VOICE_WAKE (space
+# separated for several).
 #
 # Session: $HERDR_VOICE_SESSION, else the first running of personal, work,
 # default (the daemon has no herdr context of its own).
@@ -26,7 +28,10 @@
 set -uo pipefail
 
 herdr_bin=${HERDR_BIN_PATH:-herdr}
-wake=${HERDR_VOICE_WAKE:-beacon}
+wake=${HERDR_VOICE_WAKE:-cauldron}
+# Split, because every wake word is compared as one target: a multi-word
+# HERDR_VOICE_WAKE that stayed a single string would match nothing at all.
+read -r -a wake_words <<<"$wake"
 
 # --wake prints the word, so the palette's voice phrases cannot drift from the
 # word this script actually listens for.
@@ -71,6 +76,8 @@ lev() { # <a> <b> -> edit distance
 # only when it is also followed by a herdr verb.
 wake_offset=0
 wake_exact=0
+wake_d=99
+wake_wlen=0
 find_wake() {
     local n cand k max t d
     for n in 1 2; do
@@ -85,10 +92,12 @@ find_wake() {
         else
             max=1
         fi
-        for t in herdr "$wake"; do
+        for t in herdr "${wake_words[@]}"; do
             d=$(lev "$cand" "$t")
             if ((d <= max)); then
                 wake_offset=$n
+                wake_d=$d
+                wake_wlen=${#t}
                 ((d == 0)) && wake_exact=1
                 return 0
             fi
@@ -175,11 +184,16 @@ new | news | newspace | space)
     # "new space <name>" is three tokens the recogniser routinely fuses into
     # "newspace" or "Newsbase"; accept both shapes, and "space" alone.
     #
-    # The one command with a free-form argument, so it demands the wake word
-    # verbatim: a fuzzy match ("Hurder", "Heard a") plus a guessed name is how
-    # a space ends up called "based-upon". Closed vocabularies below validate
-    # their argument instead, so they accept the fuzzy wake.
-    ((wake_exact)) || passthrough
+    # The one command with a free-form argument, so it takes the wake word one
+    # edit away — "caldron" — and no further. That is safe now and was not when
+    # the wake word was "herdr": five real words (header, harder, heather,
+    # hurdle, herder) sit within two edits of it and only "herder" within one.
+    # Nothing within one edit of "cauldron" is a *different* word — "caldron" is
+    # the same one misspelt — and two edits would re-admit "header"; so the
+    # guessed name this guard was built against still needs a wake word of at
+    # least six letters: "herdr" is five, and "herder" would pass for it at one
+    # edit. The label it creates is announced, deduplicated and renamable.
+    ((wake_exact || (wake_d <= 1 && wake_wlen >= 6))) || passthrough
     i=1
     [[ ${v[1]:-} == space ]] && i=2
     name=${v[*]:i}
