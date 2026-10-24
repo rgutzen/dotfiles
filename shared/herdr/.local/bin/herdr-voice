@@ -26,8 +26,13 @@
 set -uo pipefail
 
 herdr_bin=${HERDR_BIN_PATH:-herdr}
-transcript=$(cat)
 wake=${HERDR_VOICE_WAKE:-beacon}
+
+# --wake prints the word, so the palette's voice phrases cannot drift from the
+# word this script actually listens for.
+[[ ${1:-} == --wake ]] && { printf '%s\n' "$wake"; exit 0; }
+
+transcript=$(cat)
 
 # Matching copy only, never echoed: lowercased, with every run of
 # non-alphanumerics turned into ONE space. Deleting punctuation instead — as
