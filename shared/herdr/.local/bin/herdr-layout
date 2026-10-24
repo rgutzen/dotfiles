@@ -64,7 +64,13 @@ pair)
     agent_pane=$("$herdr_bin" pane split "$target" --direction right --ratio 0.4 \
         --cwd "$cwd" --no-focus | jq -r '.result.pane.pane_id // empty')
     [[ -n $agent_pane ]] || die "pane split returned no pane id"
-    "$herdr_bin" agent start "${arg:-pi-impl}" --kind pi --pane "$agent_pane"
+    name=${arg:-pi-impl}
+    "$herdr_bin" agent start "$name" --kind pi --pane "$agent_pane"
+    # The name is the handle you address by, and herdr's sidebar shows the agent
+    # KIND ("pi") until it is told otherwise — so report the name as the display
+    # label. Without this the name exists only in `herdr agent list`.
+    "$herdr_bin" pane report-metadata "$agent_pane" --source herdr-layout \
+        --display-agent "$name" >/dev/null 2>&1 || true
     ;;
 git)
     new_tab git lazygit
