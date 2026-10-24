@@ -2,9 +2,10 @@
 # herdr-voice — Voxtype post-process hook: spoken herdr commands, else dictation.
 #
 # Voxtype pipes the transcript to stdin and types whatever this prints. A
-# transcript that starts with the word "herdr" and a known verb runs the herdr
-# CLI and prints nothing, so nothing is typed. Everything else is echoed
-# unchanged and typed at the cursor.
+# transcript that opens with the word "herdr" — spelled as the recogniser heard
+# it, within a small edit distance — and a known verb runs the herdr CLI and
+# prints nothing, so nothing is typed. Everything else is echoed unchanged and
+# typed at the cursor.
 #
 #   herdr new space <name>   herdr workspace create --label <name>
 #   herdr pair <agent>       herdr-layout pair <agent>
@@ -29,7 +30,51 @@ passthrough() {
     exit 0
 }
 
-[[ ${w[0]:-} == herdr ]] || passthrough
+# The recogniser has no custom vocabulary here, so it writes the wake word as it
+# hears it: "Herder", "hearder", "heard her". Match the leading word(s) by edit
+# distance instead of demanding the spelling — and let the verb gate below do
+# the rest of the filtering, so a stray near-match simply falls through.
+lev() { # <a> <b> -> edit distance
+    printf '%s\n%s\n' "$1" "$2" | awk '
+        NR==1 { al=length($0); for (i=1;i<=al;i++) a[i]=substr($0,i,1) }
+        NR==2 { bl=length($0); for (j=1;j<=bl;j++) b[j]=substr($0,j,1) }
+        END {
+            for (i=0;i<=al;i++) d[i,0]=i
+            for (j=0;j<=bl;j++) d[0,j]=j
+            for (i=1;i<=al;i++) for (j=1;j<=bl;j++) {
+                cost = (a[i]==b[j]) ? 0 : 1
+                m = d[i-1,j] + 1
+                if (d[i,j-1] + 1 < m) m = d[i,j-1] + 1
+                if (d[i-1,j-1] + cost < m) m = d[i-1,j-1] + cost
+                d[i,j] = m
+            }
+            print d[al,bl]
+        }'
+}
+
+# How many leading tokens spell the wake word: 1 normally, 2 when it was heard
+# as two words ("heard her"). Tolerance grows with the candidate's length, and
+# deliberately stays tight for short ones — "heard" alone is a real word, and a
+# loose match there would eat the first token of an ordinary sentence.
+offset=0
+for n in 1 2; do
+    cand=""
+    for ((k = 0; k < n; k++)); do cand+=${w[k]:-}; done
+    [[ -n $cand ]] || continue
+    if ((n == 2)); then
+        max=3
+    elif ((${#cand} >= 6)); then
+        max=2
+    else
+        max=1
+    fi
+    if (($(lev "$cand" herdr) <= max)); then
+        offset=$n
+        break
+    fi
+done
+((offset)) || passthrough
+v=("${w[@]:offset}")
 
 session() {
     [[ -n ${HERDR_VOICE_SESSION:-} ]] && { echo "$HERDR_VOICE_SESSION"; return; }
@@ -68,23 +113,23 @@ layout() { # <profile> [arg]
         notify-send -a herdr-voice "herdr-voice" "failed: ${words}" 2>/dev/null
 }
 
-case "${w[1]:-} ${w[2]:-}" in
+case "${v[0]:-} ${v[1]:-}" in
 "new space")
-    name=${w[*]:3}
+    name=${v[*]:2}
     [[ -n $name ]] || passthrough
     run herdr workspace create --label "${name// /-}"
     ;;
 *)
-    case ${w[1]:-} in
-    pair) layout pair "${w[2]:-}" ;;
+    case ${v[0]:-} in
+    pair) layout pair "${v[1]:-}" ;;
     watch)
-        view=${w[2]:-}
+        view=${v[1]:-}
         [[ $view == schedule ]] && view=sessions
         layout watch "$view"
         ;;
     layout)
-        [[ -n ${w[2]:-} ]] || passthrough
-        layout "${w[2]}"
+        [[ -n ${v[1]:-} ]] || passthrough
+        layout "${v[1]}"
         ;;
     *) passthrough ;;
     esac
