@@ -1,0 +1,7 @@
+# Files Omarchy regenerates on every theme set; they stay machine-local.
+# (A custom list replaces stow's defaults, so the list's own file is ignored too.)
+\.stow-local-ignore
+lua/plugins/theme\.lua
+lua/plugins/omarchy-theme-hotreload\.lua
+plugin/after/transparency\.lua
+.*\.bak\..*

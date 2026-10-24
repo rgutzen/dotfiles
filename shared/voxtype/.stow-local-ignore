@@ -1,0 +1,9 @@
+# Voxtype owns its own config.toml. Observed at the 2026-10-24 daemon start:
+# it serialised the whole file, reordered the comments and left a .bak beside
+# it. A stow symlink would write that serialisation straight into this public
+# repository. The tracked file is the seed instead; bootstrap copies it only
+# where the machine has none, and voxtype owns it from then on.
+#
+# A custom list replaces stow's defaults, so the list's own file is ignored too.
+\.stow-local-ignore
+config\.toml

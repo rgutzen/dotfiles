@@ -1,0 +1,192 @@
+# Herdr — tracked base configuration.
+#
+# `~/.config/herdr/config.toml` is GENERATED, not edited: it is this file plus a
+# `[theme.custom]` block that `~/.config/omarchy/hooks/theme-set.d/20-herdr.sh`
+# derives from the active Omarchy palette. Edit here, then re-run that hook
+# (`omarchy-theme-set <theme>` does both).
+#
+# Naming: the CLI says workspace, the UI says Space. Same object.
+# Mirrors the Omarchy tmux config: tmux session -> herdr session, window -> tab,
+# pane -> pane.
+
+onboarding = false
+
+[theme]
+# Panes inherit the terminal's ANSI palette (gruvbox via ghostty). The UI
+# surfaces — sidebar, tab bar, borders, selection — come from the generated
+# [theme.custom] block, because herdr has no include mechanism.
+name = "terminal"
+
+[terminal]
+# Matches -c "#{pane_current_path}" on every split, window, and session
+new_cwd = "follow"
+
+[keys]
+prefix = "ctrl+space"
+
+# Config and help
+reload_config = "prefix+q"
+help = "prefix+?"
+detach = "prefix+d"
+
+# Copy mode
+copy_mode = "prefix+["
+
+# Panes
+split_horizontal = ["prefix+h", "alt+enter"]
+split_vertical = ["prefix+v", "alt+shift+enter"]
+close_pane = ["prefix+x", "alt+esc"]
+zoom = "prefix+z"
+last_pane = "prefix+;"
+
+focus_pane_left = "ctrl+alt+left"
+focus_pane_down = "ctrl+alt+down"
+focus_pane_up = "ctrl+alt+up"
+focus_pane_right = "ctrl+alt+right"
+
+resize_mode = ["prefix+ctrl+left", "prefix+ctrl+down", "prefix+ctrl+up", "prefix+ctrl+right"]
+
+# Like resize-pane on C-M-S-arrows
+resize_pane_left = "ctrl+alt+shift+left"
+resize_pane_down = "ctrl+alt+shift+down"
+resize_pane_up = "ctrl+alt+shift+up"
+resize_pane_right = "ctrl+alt+shift+right"
+
+# No tmux equivalent; herdr's default prefix+shift+p is taken by previous session
+rename_pane = "prefix+shift+o"
+
+# Windows -> tabs
+new_tab = "prefix+c"
+rename_tab = "prefix+r"
+close_tab = "prefix+k"
+switch_tab = ["prefix+1..9", "alt+1..9"]
+previous_tab = ["prefix+p", "alt+left"]
+next_tab = ["prefix+n", "alt+right"]
+
+# Like swap-window -t -1/+1 on M-S-Left/Right
+move_tab_previous = "alt+shift+left"
+move_tab_next = "alt+shift+right"
+
+# Sessions -> workspaces
+new_workspace = "prefix+shift+c"
+rename_workspace = "prefix+shift+r"
+close_workspace = "prefix+shift+k"
+previous_workspace = ["prefix+shift+p", "alt+up"]
+next_workspace = ["prefix+shift+n", "alt+down"]
+
+# Tools that live beside the agent rather than in the layout.
+# `herdr-layout` and `herdr-watch` are stowed in ~/.local/bin.
+[[keys.command]]
+key = "prefix+alt+g"
+type = "popup"
+command = "lazygit"
+width = "90%"
+height = "90%"
+description = "lazygit for the focused pane's repository"
+
+[[keys.command]]
+key = "prefix+alt+l"
+type = "popup"
+command = "herdr-layout"
+width = "70%"
+height = "50%"
+description = "build a tab profile: edit | pair | git | watch"
+
+[[keys.command]]
+key = "prefix+alt+m"
+type = "pane"
+command = "herdr-watch todos"
+description = "monitor pane in the focused space"
+
+[[keys.command]]
+key = "prefix+space"
+type = "popup"
+command = "herdr-palette"
+width = "70%"
+height = "60%"
+description = "searchable palette of every action and its key"
+
+[[keys.command]]
+key = "prefix+alt+n"
+type = "popup"
+command = "herdr-palette --wanted"
+width = "60%"
+height = "20%"
+description = "log a 'wanted: ...' friction note"
+
+[ui]
+# tmux drew single-line dividers between adjacent panes and no outer frame
+pane_gaps = false
+pane_outer_borders = false
+pane_scrollbars = false
+
+# kill-window and kill-session never asked
+confirm_close = false
+
+# automatic-rename gave windows a name without prompting
+prompt_new_tab_name = false
+
+# set -g mouse on
+mouse_capture = true
+
+# Shape as well as colour: blocked, working, done, idle, unknown stay
+# distinguishable without relying on hue.
+status_indicators = "symbols"
+
+# Attention queue rather than grouped by space: an agent that finished or is
+# blocked belongs at the top, wherever it lives.
+agent_panel_sort = "priority"
+
+# status-right had the zoom flag followed by #h, then the one-line monitor.
+tab_bar_right = [
+  { type = "zoom" },
+  { type = "hostname" },
+  { type = "command", command = "herdr-watch status", interval_seconds = 20, timeout_seconds = 5 },
+]
+
+# set -g set-titles on / set -g set-titles-string '#h:#W', where tmux's #W was
+# the basename of the pane cwd. This is what Hyprland shows in the group bar,
+# and it resolves on the server so remote sessions name the remote host.
+window_title = "{hostname}: {workspace}"
+
+# Desktop notifications when a background agent blocks or finishes, and a sound
+# for the same event. Both are muted while that agent is focused.
+[ui.toast]
+delivery = "system"
+
+[ui.sound]
+enabled = true
+
+# Two rows per agent: state and task on the first, the pane's own title on the
+# second. `terminal_title_stripped` is what pi writes (π - <topic> - <dir>), so
+# the sidebar shows what the agent is working on without any extra reporting.
+# `$model` is reported by the pi extension `herdr-metadata.ts` (--token model=<id>);
+# the rule colours a long-context model so it stands out between two agents.
+[ui.sidebar.agents]
+row_gap = 0
+rows = [
+  ["state_icon", "agent", { token = "$model", dim = true, rules = [{ contains = "1m", ignore_case = true, fg = "#d79921", bold = true, dim = false }] }, "state_text"],
+  ["terminal_title_stripped"],
+  ["workspace", "tab"],
+]
+
+[ui.sidebar.spaces]
+row_gap = 0
+rows = [
+  ["state_icon", "workspace"],
+  ["branch", "git_status"],
+]
+
+[worktrees]
+# Same directory the rest of the tree uses for checkouts.
+directory = "~/02_AREAS/B_Tech/worktrees"
+
+[session]
+# Pi reports its own conversation id through the integration, so a server
+# restart resumes the conversation instead of leaving a bare shell.
+resume_agents_on_restore = true
+
+[experimental]
+# Off on purpose: pane history writes terminal output to disk, and these panes
+# hold prompts, tokens and client data.
+pane_history = false

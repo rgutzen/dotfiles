@@ -138,7 +138,7 @@ echo "▸ session:  $SESSION"
 echo "▸ os:       ${OS_TIER:-(unrecognised — OS tier skipped)}"
 echo
 
-stow_tier shared "$DOTFILES/shared" bash zsh git conda gtk systemd ai inbox-zero proton bin starship easyeffects
+stow_tier shared "$DOTFILES/shared" bash zsh git conda gtk systemd ai inbox-zero proton bin starship easyeffects herdr nvim lazygit voxtype
 stow_tier "$SESSION" "$DOTFILES/$SESSION" "${SESSION_PKGS[@]}"
 [[ -n "$OS_TIER" ]] && stow_tier "$OS_TIER" "$DOTFILES/$OS_TIER" "${OS_PKGS[@]}"
 
@@ -188,6 +188,49 @@ else
     echo "    then: ./shared/theme/apply-theme.sh"
 fi
 
+# Herdr has no config include: config.toml is config.toml.base plus a
+# [theme.custom] block derived from the active Omarchy palette. Stowing alone
+# leaves no config.toml at all, so generate it here too.
+HERDR_THEME_HOOK="$HOME/.config/omarchy/hooks/theme-set.d/20-herdr.sh"
+if [[ -x "$HERDR_THEME_HOOK" ]]; then
+    "$HERDR_THEME_HOOK" "$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null || echo unknown)" >/dev/null \
+        && echo "  ✓ herdr palette generated" \
+        || echo "  ! herdr palette generation failed"
+fi
+
+# ── service-owned config ─────────────────────────────────────────────────
+echo
+echo "── voice ──"
+# Voxtype writes its own config.toml (seen at the 2026-10-24 daemon start: a
+# whole-file serialisation, comments reordered, a .bak beside it), so
+# shared/voxtype/.stow-local-ignore keeps it out of stow — a symlink would
+# write that serialisation into this public repository. The tracked file is the
+# seed, applied only where the machine has none.
+VOXTYPE_SEED="$DOTFILES/shared/voxtype/.config/voxtype/config.toml"
+VOXTYPE_CONF="$HOME/.config/voxtype/config.toml"
+if [[ -f "$VOXTYPE_SEED" && ! -e "$VOXTYPE_CONF" ]]; then
+    mkdir -p "$(dirname "$VOXTYPE_CONF")"
+    cp "$VOXTYPE_SEED" "$VOXTYPE_CONF" && echo "  + seeded ~/.config/voxtype/config.toml"
+else
+    echo "  ✓ voxtype config.toml is voxtype's own"
+fi
+
+# ── agent integrations ───────────────────────────────────────────────────
+# Herdr owns these files (it writes them into each harness's own config dir),
+# so they are not stowed. Re-installing is idempotent and also upgrades an
+# outdated integration version.
+echo
+echo "── agent integrations ──"
+if command -v herdr >/dev/null; then
+    if herdr integration install pi >/dev/null 2>&1; then
+        echo "  ✓ herdr integration: pi"
+    else
+        echo "  ! herdr integration: pi failed"
+    fi
+else
+    echo "  ! herdr missing — https://herdr.dev"
+fi
+
 # ── systemd user timers ──────────────────────────────────────────────────
 # The enable list used to be hardcoded here, a second copy of a fact that
 # already lives in PAZRAS_TIMERS (06_SYSTEM/engine/structure/pazras-master-
@@ -234,4 +277,8 @@ fi
 
 echo
 echo "✅ bootstrap complete"
-[[ "$SESSION" == "x11" ]] && echo "   reload i3 with \$mod+Shift+R"
+# `if`, not a trailing `&&` list: under `set -e` a false test on the script's
+# LAST line becomes the script's exit status, so every wayland run ended in 1.
+if [[ "$SESSION" == "x11" ]]; then
+    echo "   reload i3 with \$mod+Shift+R"
+fi

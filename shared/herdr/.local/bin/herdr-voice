@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# herdr-voice — Voxtype post-process hook: spoken herdr commands, else dictation.
+#
+# Voxtype pipes the transcript to stdin and types whatever this prints. A
+# transcript that starts with the word "herdr" and a known verb runs the herdr
+# CLI and prints nothing, so nothing is typed. Everything else is echoed
+# unchanged and typed at the cursor.
+#
+#   herdr new space <name>   herdr workspace create --label <name>
+#   herdr pair <agent>       herdr-layout pair <agent>
+#   herdr watch <view>       herdr-layout watch <view>
+#   herdr layout <profile>   herdr-layout <profile> (edit|pair|git|watch)
+#
+# Session: $HERDR_VOICE_SESSION, else the first running of personal, work,
+# default (the daemon has no herdr context of its own).
+# HERDR_VOICE_DRY=1 prints the command to stderr instead of running it.
+
+set -uo pipefail
+
+herdr_bin=${HERDR_BIN_PATH:-herdr}
+transcript=$(cat)
+
+# Speech-to-text capitalises and punctuates: "Herdr, new space Dotfiles."
+words=$(printf '%s' "$transcript" | tr '[:upper:]' '[:lower:]' | tr -d '[:punct:]')
+read -r -a w <<<"$words"
+
+passthrough() {
+    printf '%s' "$transcript"
+    exit 0
+}
+
+[[ ${w[0]:-} == herdr ]] || passthrough
+
+session() {
+    [[ -n ${HERDR_VOICE_SESSION:-} ]] && { echo "$HERDR_VOICE_SESSION"; return; }
+    local running s
+    running=$("$herdr_bin" session list 2>/dev/null | awk '$2=="running"{print $1}')
+    for s in personal work default; do
+        grep -qx "$s" <<<"$running" && { echo "$s"; return; }
+    done
+}
+
+run() {
+    local s
+    s=$(session)
+    [[ -n $s ]] && set -- "$herdr_bin" --session "$s" "${@:2}" || set -- "$herdr_bin" "${@:2}"
+    if [[ -n ${HERDR_VOICE_DRY:-} ]]; then
+        echo "herdr-voice: $*" >&2
+        return 0
+    fi
+    "$@" >/dev/null 2>&1 || notify-send -a herdr-voice "herdr-voice" "failed: ${words}" 2>/dev/null
+}
+
+layout() { # <profile> [arg]
+    local s wrapper
+    s=$(session)
+    if [[ -n ${HERDR_VOICE_DRY:-} ]]; then
+        echo "herdr-voice: herdr-layout $* (session ${s:-none})" >&2
+        return 0
+    fi
+    # herdr-layout calls $HERDR_BIN_PATH with no --session, so point it at a
+    # one-line wrapper that adds the session.
+    wrapper=${XDG_RUNTIME_DIR:-/tmp}/herdr-voice-bin
+    mkdir -p "$wrapper"
+    printf '#!/bin/sh\nexec %q%s "$@"\n' "$herdr_bin" "${s:+ --session $s}" >"$wrapper/herdr"
+    chmod +x "$wrapper/herdr"
+    HERDR_BIN_PATH=$wrapper/herdr herdr-layout "$@" >/dev/null 2>&1 ||
+        notify-send -a herdr-voice "herdr-voice" "failed: ${words}" 2>/dev/null
+}
+
+case "${w[1]:-} ${w[2]:-}" in
+"new space")
+    name=${w[*]:3}
+    [[ -n $name ]] || passthrough
+    run herdr workspace create --label "${name// /-}"
+    ;;
+*)
+    case ${w[1]:-} in
+    pair) layout pair "${w[2]:-}" ;;
+    watch)
+        view=${w[2]:-}
+        [[ $view == schedule ]] && view=sessions
+        layout watch "$view"
+        ;;
+    layout)
+        [[ -n ${w[2]:-} ]] || passthrough
+        layout "${w[2]}"
+        ;;
+    *) passthrough ;;
+    esac
+    ;;
+esac
+exit 0
