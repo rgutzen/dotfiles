@@ -1,0 +1,21 @@
+# lazygit — config for lazygit v0.66+ (see /usr/share/doc/lazygit/Config.md).
+# Only keys that differ from the defaults are set here.
+
+os:
+  # `e` opens files in nvim (the editor this setup uses everywhere).
+  editPreset: nvim
+
+gui:
+  # Nerd Font v3 icons. Requires a Nerd Font in the terminal (ghostty).
+  nerdFontsVersion: "3"
+
+git:
+  # No stdin diff filter (delta is not installed). Lazygit then renders diffs
+  # with git's own pager, not through a filter.
+  diffRenderers: []
+
+keybinding:
+  universal:
+    # New worktree from the Files and Branches panels. Matches the default,
+    # pinned so that a change upstream does not move it.
+    newWorktree: w

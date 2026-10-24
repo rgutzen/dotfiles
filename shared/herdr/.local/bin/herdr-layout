@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# herdr-layout — build one tab profile in the calling space.
+#
+# Profiles are built on demand, never as a template: a five-tab layout for a
+# one-tab task is how a space becomes noise. Reachable from a herdr pane
+# (prefix+alt+l) and from the CLI, so an agent can build the same shape.
+#
+# usage: herdr-layout [edit|pair|git|watch] [arg]
+#   edit        a tab running nvim in the current directory
+#   pair        split the calling pane, start pi in the right pane, keep focus
+#   git         a tab running lazygit
+#   watch       a tab running herdr-watch <view>
+
+set -euo pipefail
+
+herdr_bin=${HERDR_BIN_PATH:-herdr}
+profile=${1:-edit}
+arg=${2:-}
+cwd=${HERDR_LAYOUT_CWD:-$PWD}
+
+die() {
+    echo "herdr-layout: $*" >&2
+    exit 1
+}
+
+new_tab() { # <label> <command...>
+    local label=$1 pane
+    shift
+    pane=$("$herdr_bin" tab create --label "$label" --cwd "$cwd" --focus |
+        jq -r '.result.root_pane.pane_id // empty')
+    [[ -n $pane ]] || die "tab create returned no pane id"
+    # The pty buffers this until the shell is ready, so no sleep is needed.
+    "$herdr_bin" pane run "$pane" "$@" >/dev/null
+}
+
+case $profile in
+edit)
+    new_tab edit nvim
+    ;;
+pair)
+    # Called from a popup there is no HERDR_PANE_ID, so resolve the focused pane.
+    target=${HERDR_PANE_ID:-$("$herdr_bin" pane current | jq -r '.result.pane.pane_id // empty')}
+    [[ -n $target ]] || die "no focused pane to split"
+    agent_pane=$("$herdr_bin" pane split "$target" --direction right --ratio 0.4 \
+        --cwd "$cwd" --no-focus | jq -r '.result.pane.pane_id // empty')
+    [[ -n $agent_pane ]] || die "pane split returned no pane id"
+    "$herdr_bin" agent start "${arg:-pi-impl}" --kind pi --pane "$agent_pane"
+    ;;
+git)
+    new_tab git lazygit
+    ;;
+watch)
+    new_tab watch herdr-watch "${arg:-todos}"
+    ;;
+*)
+    die "unknown profile '$profile' (edit|pair|git|watch)"
+    ;;
+esac

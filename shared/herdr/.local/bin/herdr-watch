@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# herdr-watch — one line for the tab bar, or a self-refreshing pane.
+#
+#   status   printed by the tab_bar_right command entry in config.toml (20 s)
+#   <view>   loops in a pane, so the view is current whenever you look at it
+#
+# The views are the commands that already answer the question; this script only
+# owns the loop. Nothing here writes state.
+
+set -uo pipefail
+
+herdr_bin=${HERDR_BIN_PATH:-herdr}
+interval=${HERDR_WATCH_INTERVAL:-25}
+
+count() { # <jq filter over snapshot agents>
+    "$herdr_bin" api snapshot 2>/dev/null | jq -r "$1" 2>/dev/null || echo 0
+}
+
+waiting() {
+    familiar orchestration todos 2>/dev/null |
+        awk '/^waiting on you:/{f=1;next} f&&/^- /{n++} END{print n+0}'
+}
+
+status() {
+    local working blocked open line=""
+    working=$(count '[.result.snapshot.agents[]?|select(.agent_status=="working")]|length')
+    blocked=$(count '[.result.snapshot.agents[]?|select(.agent_status=="blocked")]|length')
+    open=$(waiting)
+    ((blocked > 0)) && line+="${blocked} blocked · "
+    ((working > 0)) && line+="${working} working · "
+    ((open > 0)) && line+="${open} waiting on you"
+    printf '%s\n' "${line% · }"
+}
+
+pane() {
+    local view=${1:-todos}
+    while :; do
+        clear
+        printf '%s · herdr-watch %s\n\n' "$(date +%H:%M)" "$view"
+        case $view in
+        todos) familiar orchestration todos ;;
+        sessions) familiar schedule sessions list ;;
+        relay) familiar relay status ;;
+        git) git --no-pager status --short --branch ;;
+        all)
+            familiar orchestration todos
+            printf '\n'
+            familiar schedule sessions list | head -n 8
+            ;;
+        *)
+            echo "herdr-watch: unknown view '$view' (todos|sessions|relay|git|all)" >&2
+            exit 1
+            ;;
+        esac
+        sleep "$interval"
+    done
+}
+
+case ${1:-todos} in
+status) status ;;
+*) pane "${1:-todos}" ;;
+esac
