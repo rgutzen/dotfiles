@@ -21,11 +21,11 @@ log=${HERDR_FRICTION_LOG:-$HOME/.local/state/herdr/friction.log}
 # Static table: label | key source | voice phrase | command.
 # key source: k:<[keys] name>, c:<[[keys.command]] command>, - for none.
 # Commands that need input prompt on the tty; a leading '!' marks it interactive.
-# The wake word comes from herdr-voice itself (HERDR_VOICE_WAKE, default beacon),
+# The wake word comes from herdr-voice itself (HERDR_VOICE_WAKE, default cauldron),
 # so these phrases cannot drift from the word the hook listens for. Only the edit
 # profile is reachable from prefix+alt+l — that key runs `herdr-layout` bare, which
 # is the edit tab — so the other three profiles show no key and are chosen here.
-wake=$(herdr-voice --wake 2>/dev/null) || wake=beacon
+wake=$(herdr-voice --wake 2>/dev/null) || wake=cauldron
 actions=(
 "layout: edit tab|c:herdr-layout|$wake layout edit|herdr-layout edit"
 "layout: pair (pi agent beside)|-|$wake pair <agent>|!pair"
