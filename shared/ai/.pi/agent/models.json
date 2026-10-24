@@ -15,6 +15,11 @@
           "contextWindow": 262144
         },
         {
+          "id": "qwen2.5-coder:14b",
+          "reasoning": false,
+          "contextWindow": 32768
+        },
+        {
           "id": "qwen3:30b-a3b-thinking-2507-q4_K_M",
           "reasoning": true,
           "contextWindow": 262144
