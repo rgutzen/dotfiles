@@ -16,7 +16,26 @@ set -euo pipefail
 herdr_bin=${HERDR_BIN_PATH:-herdr}
 profile=${1:-edit}
 arg=${2:-}
-cwd=${HERDR_LAYOUT_CWD:-$PWD}
+
+# Where a new tab or split starts. Called from inside a pane, $PWD IS that pane's
+# directory and is the right answer. Called from a popup or from the voice hook
+# there is no HERDR_PANE_ID at all, and $PWD is then the popup's or the voxtype
+# daemon's — so ask herdr for the focused pane instead. Verified 2026-10-24: from
+# ~ the pair split started its agent in /home/rg, not in the focused repo.
+cur=""
+if [[ -z ${HERDR_PANE_ID:-} ]]; then
+    cur=$("$herdr_bin" pane current 2>/dev/null || true)
+fi
+focused_pane() { jq -r '.result.pane.pane_id // empty' <<<"$cur" 2>/dev/null; }
+cwd=${HERDR_LAYOUT_CWD:-}
+if [[ -z $cwd ]]; then
+    if [[ -n ${HERDR_PANE_ID:-} ]]; then
+        cwd=$PWD
+    else
+        cwd=$(jq -r '.result.pane.cwd // empty' <<<"$cur" 2>/dev/null || true)
+        [[ -n $cwd ]] || cwd=$PWD
+    fi
+fi
 
 die() {
     echo "herdr-layout: $*" >&2
@@ -38,8 +57,9 @@ edit)
     new_tab edit nvim
     ;;
 pair)
-    # Called from a popup there is no HERDR_PANE_ID, so resolve the focused pane.
-    target=${HERDR_PANE_ID:-$("$herdr_bin" pane current | jq -r '.result.pane.pane_id // empty')}
+    # Called from a popup or the voice hook there is no HERDR_PANE_ID: the
+    # focused pane, resolved once above, is the one to split.
+    target=${HERDR_PANE_ID:-$(focused_pane)}
     [[ -n $target ]] || die "no focused pane to split"
     agent_pane=$("$herdr_bin" pane split "$target" --direction right --ratio 0.4 \
         --cwd "$cwd" --no-focus | jq -r '.result.pane.pane_id // empty')
