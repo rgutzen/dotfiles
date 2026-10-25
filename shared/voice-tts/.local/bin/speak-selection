@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# speak-selection -- speak whatever is selected; press again to stop.
+#
+# Bound to SUPER+ALT+L. The primary selection is read with wl-paste, so the text
+# never goes through the clipboard and never lands in a buffer.
+set -uo pipefail
+
+# A run already speaking means this press is "stop", not "speak again".
+if say --stop >/dev/null 2>&1; then
+    exit 0
+fi
+
+# Primary selection first. Not every toolkit publishes one — an app that copies
+# on select may set only the clipboard — so the clipboard is the fallback, which
+# is what "select, copy, speak" already means to the operator.
+text="$(wl-paste --primary --no-newline 2>/dev/null || true)"
+if [[ -z "${text//[[:space:]]/}" ]]; then
+    text="$(wl-paste --no-newline 2>/dev/null || true)"
+fi
+if [[ -z "${text//[[:space:]]/}" ]]; then
+    # Silence is the right answer: the operator pressed a key, not a question.
+    exit 0
+fi
+
+printf '%s' "$text" | say

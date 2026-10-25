@@ -6,7 +6,7 @@
 # mechanical step — see timers-gen.sh header.
 
 [Unit]
-Description=Open a Claude window on purpose — the Loom pings Haiku two minutes after each 5h window ends
+Description=Open a Claude window on purpose — a 5-minute tick that pings Haiku when the last 5h window has ended (state-driven, no interval)
 Documentation=file:%h/06_SYSTEM/dev/orchestration/SPECS.md
 OnFailure=notify@%n.service
 

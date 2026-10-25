@@ -1,0 +1,20 @@
+[Unit]
+Description=voice-tts — OpenAI-compatible text-to-speech on the LAN
+Documentation=file:%h/.local/lib/voice-tts/voice-tts.py
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/pazras/voice-tts.env
+Environment=VOICE_TTS_MODELS=%h/.local/share/voice-tts/models
+Environment=VOICE_TTS_VOICE=af_heart
+ExecStart=%h/.local/share/voice-tts/venv/bin/python %h/.local/lib/voice-tts/voice-tts.py serve --host 127.0.0.1 --port 8001
+Restart=always
+RestartSec=3
+# Synthesis is one core, but keep it below the compositor and the agents.
+Nice=5
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=default.target
