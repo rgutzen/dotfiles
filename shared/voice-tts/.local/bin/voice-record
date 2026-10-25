@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# voice-record -- start dictation, and stop any speech already in the room.
+#
+# Bound to SUPER+SHIFT+L (was `voxtype record toggle`). Two reasons the stop
+# comes first: the microphone would otherwise record the voice it is meant to
+# replace, and dictation is the moment the operator has decided to talk, so the
+# machine should be quiet.
+set -uo pipefail
+
+say --stop >/dev/null 2>&1 || true
+exec voxtype record toggle

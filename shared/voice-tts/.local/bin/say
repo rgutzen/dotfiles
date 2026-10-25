@@ -1,0 +1,464 @@
+#!/usr/bin/env python3
+"""say -- speak text through the local voice-tts service, sentence by sentence.
+
+WHY. One sentence is the unit that matters. The service needs ~0.5 s for the
+first sentence and then runs several times faster than playback, so splitting
+the text lets the voice start while the rest is still being synthesised. Feed it
+an artifact and it reads the prose, skipping what cannot be spoken.
+
+    say "Robin, the tests pass."
+    cat note.md | say
+    say --voice bm_george --speed 1.1 "Slower is not always clearer."
+    say --out /tmp/reply.wav --no-play "Write to a file instead."
+
+Text that is not speech is dropped on the way in: fenced code, tables, bare URLs
+and markdown syntax. Pronunciation of paths and symbols is not attempted.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import queue
+import re
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+DEFAULT_URL = "http://127.0.0.1:8001"
+DEFAULT_VOICE = "af_heart"
+CONF_FILE = os.path.expanduser(
+    os.environ.get("VOICE_TTS_CONF", "~/.config/voice-tts/config")
+)
+ENV_FILE = os.path.expanduser("~/.config/pazras/voice-tts.env")
+MAX_SENTENCE = 220  # characters; longer units are split at clause boundaries
+RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice-tts"
+PREROLL_MS = 300  # silence in front of a cold first sentence; see wake_sink()
+
+ABBREVIATIONS = {
+    "e.g", "i.e", "vs", "etc", "cf", "al", "approx", "fig", "no", "dr", "mr",
+    "mrs", "ms", "st", "jr", "sr", "inc", "ltd", "v", "p", "pp", "sec", "min",
+}
+
+
+# ------------------------------------------------------------------ text shaping
+
+
+def strip_unspoken(text: str) -> str:
+    text = re.sub(r"```.*?```", "", text, flags=re.S)          # fenced code
+    text = re.sub(r"`([^`]*)`", r"\1", text)                    # inline code
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)            # images
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)        # links -> label
+    text = re.sub(r"https?://\S+", "", text)                    # bare urls
+    text = re.sub(r"^\s*\|.*$", "", text, flags=re.M)            # table rows (truncated too)
+    text = re.sub(r"^.*\|.*\|.*$", "", text, flags=re.M)         # table rows
+    text = re.sub(r"^\s*[-=]{3,}\s*$", "", text, flags=re.M)      # rules
+    text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.M)   # headings
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.M)        # bullets
+    text = re.sub(r"^\s*\d+[.)]\s+", "", text, flags=re.M)      # numbered lists
+    text = re.sub(r"[*_]{1,2}([^*_]+)[*_]{1,2}", r"\1", text)   # emphasis
+    text = re.sub(r"[\u2014\u2013]", ", ", text)                 # em/en dash -> pause
+    text = re.sub(r"[\u00b7\u2022\u25aa\u25ab\u2581-\u2588\u25cf\u25cb]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def split_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    out: list[str] = []
+    for part in parts:
+        words = part.split()
+        if not words:
+            continue
+        tail = words[-1].rstrip(".!?").lower()
+        prev = out[-1] if out else None
+        if tail in ABBREVIATIONS and prev is not None:
+            out[-1] = f"{prev} {part}"          # glue abbreviations to the next sentence
+            continue
+        out.append(part)
+    return [s for chunk in out for s in split_long(chunk)]
+
+
+def split_long(sentence: str) -> list[str]:
+    """Keep each request short enough that the first word arrives quickly."""
+    if len(sentence) <= MAX_SENTENCE:
+        return [sentence]
+    pieces, current = [], ""
+    for clause in re.split(r"(?<=[,;:])\s+", sentence):
+        candidate = f"{current} {clause}".strip()
+        if len(candidate) > MAX_SENTENCE and current:
+            pieces.append(current)
+            current = clause
+        else:
+            current = candidate
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+# --------------------------------------------------------------------- service
+
+
+def read_config() -> dict[str, str]:
+    """`~/.config/voice-tts/config`, stowed from the dotfiles repo.
+
+    key = value, blank lines and #comments ignored. Local to this machine on
+    purpose: the token lives in ~/.config/pazras/, never here.
+    """
+    cfg: dict[str, str] = {}
+    try:
+        with open(CONF_FILE) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, val = line.split("=", 1)
+                cfg[key.strip().lower()] = val.strip()
+    except OSError:
+        pass
+    return cfg
+
+
+def read_token(explicit: str | None) -> str:
+    if explicit:
+        return explicit
+    if os.environ.get("VOICE_TTS_TOKEN"):
+        return os.environ["VOICE_TTS_TOKEN"]
+    try:
+        with open(ENV_FILE) as fh:
+            for line in fh:
+                if line.startswith("VOICE_TTS_TOKEN="):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def synth(text: str, *, url: str, token: str, voice: str, speed: float) -> bytes:
+    body = json.dumps(
+        {"input": text, "voice": voice, "speed": speed, "response_format": "pcm"}
+    ).encode()
+    req = urllib.request.Request(
+        f"{url.rstrip('/')}/v1/audio/speech",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            **({"Authorization": f"Bearer {token}"} if token else {}),
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:200]
+        raise SystemExit(f"say: {exc.code} from {url}: {detail}")
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"say: cannot reach {url} ({exc.reason}); is voice-tts running?")
+
+
+def sink_suspended() -> bool:
+    """True if the default sink is asleep, ignoring every failure.
+
+    Bluetooth is the case that matters: after a few quiet seconds WirePlumber
+    suspends the A2DP node, and the headset needs time to bring the transport
+    back. Audio written before that finishes is played into nothing.
+    """
+    try:
+        out = subprocess.run(["pactl", "-f", "json", "list", "sinks"],
+                             capture_output=True, text=True, timeout=5).stdout
+        name = subprocess.run(["pactl", "get-default-sink"], capture_output=True,
+                              text=True, timeout=5).stdout.strip()
+        for sink in json.loads(out):
+            if sink.get("name") == name:
+                return str(sink.get("state", "")).upper() == "SUSPENDED"
+    except Exception:  # noqa: BLE001 - a missing pactl must not break speech
+        pass
+    return False
+
+
+class SinkWake(threading.Thread):
+    """Wake the sink while the first sentence is being synthesised.
+
+    Started at the beginning of a run, so the three `pactl` calls (~0.3 s)
+    overlap the service's ~0.5 s instead of preceding it — waking the device
+    used to cost more than it saved. `cold` says whether it was asleep, which
+    only the first write needs to know.
+    """
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.cold = False
+        self.ready = threading.Event()
+
+    def run(self):
+        try:
+            self.cold = sink_suspended()
+            subprocess.run(["pactl", "suspend-sink", "@DEFAULT_SINK@", "0"],
+                           capture_output=True, timeout=5)
+        except Exception:  # noqa: BLE001 - a missing pactl must not break speech
+            pass
+        finally:
+            self.ready.set()
+
+    def join_ready(self, timeout: float = 3.0) -> bool:
+        self.ready.wait(timeout)
+        return self.ready.is_set()
+
+
+class Player:
+    """One `pw-cat` for the whole run, so utterances join without a seam.
+
+    A process per sentence would open a fresh PipeWire stream each time: an
+    audible gap, another chance at a cold start, and — on Bluetooth — a device
+    that may duck or renegotiate mid-reply.
+    """
+
+    def __init__(self, rate: int = 24000, preroll_ms: int = PREROLL_MS, cold: bool = False):
+        self.rate = rate
+        self.proc = subprocess.Popen(
+            ["pw-cat", "--playback", "--raw", "--rate", str(rate), "--channels", "1",
+             "--format", "s16", "-"],
+            stdin=subprocess.PIPE,
+        )
+        self.first = True
+        self.silence = b"\x00\x00" * int(rate * max(0, preroll_ms) / 1000) if cold else b""
+        self.register()
+
+    def write(self, pcm: bytes):
+        try:
+            if self.first:
+                self.first = False
+                if self.silence:
+                    self.proc.stdin.write(self.silence)
+            self.proc.stdin.write(pcm)
+            self.proc.stdin.flush()
+        except BrokenPipeError:
+            raise SystemExit("say: playback stopped")
+
+    def close(self):
+        try:
+            self.proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        code = self.proc.wait()
+        unregister()
+        if code != 0:
+            raise SystemExit("say: pw-cat failed to play; is a sink available?")
+
+    # -- registry, so `say --stop` and the selection bind can interrupt it
+    def register(self):
+        try:
+            RUNTIME_DIR.mkdir(exist_ok=True)
+            me = RUNTIME_DIR / f"{os.getpid()}.json"
+            me.write_text(json.dumps({"say": os.getpid(), "player": self.proc.pid}))
+        except OSError:
+            pass
+
+
+def unregister():
+    try:
+        (RUNTIME_DIR / f"{os.getpid()}.json").unlink()
+    except OSError:
+        pass
+
+
+def stop_all() -> int:
+    """Kill every live run. Returns how many were stopped."""
+    stopped = 0
+    try:
+        entries = list(RUNTIME_DIR.glob("*.json"))
+    except OSError:
+        return 0
+    for entry in entries:
+        try:
+            pids = [int(v) for v in json.loads(entry.read_text()).values() if v]
+        except (OSError, ValueError, TypeError):
+            entry.unlink(missing_ok=True)
+            continue
+        alive = False
+        for pid in pids:
+            if _is_speech(pid):
+                alive = True
+        if not alive:
+            entry.unlink(missing_ok=True)
+            continue
+        stopped += 1
+        for sig in (15, 9):
+            for pid in pids:
+                if not _is_speech(pid):
+                    continue
+                try:
+                    os.kill(pid, sig)
+                except OSError:
+                    pass
+            time.sleep(0.15)
+            if not any(_alive(pid) for pid in pids):
+                break
+        entry.unlink(missing_ok=True)
+    return stopped
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _is_speech(pid: int) -> bool:
+    """Alive *and* demonstrably ours.
+
+    A pid in a stale registry file can be reused by an unrelated process, so
+    only the executable counts: `pw-cat`, or a script named `say`. Matching the
+    whole command line would kill any process that merely mentions the name.
+    """
+    if not _alive(pid):
+        return False
+    try:
+        argv = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\x00")
+    except OSError:
+        return False
+    names = [os.path.basename(a.decode("utf-8", "replace")) for a in argv[:2] if a]
+    return any(n in ("pw-cat", "say") for n in names)
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(description="Speak text through local voice-tts")
+    ap.add_argument("text", nargs="*", help="text to speak; reads stdin if empty")
+    ap.add_argument("-f", "--file", help="read this file instead of stdin")
+    ap.add_argument("-c", "--clipboard", action="store_true", help="speak the clipboard")
+    ap.add_argument("--voice", help=f"kokoro voice id (default: config, else {DEFAULT_VOICE})")
+    ap.add_argument("--speed", type=float, help="1.0 = as recorded; 1.2 = 20%% faster")
+    ap.add_argument("--url", help=f"service base url (default: config, else {DEFAULT_URL})")
+    ap.add_argument("--voices", action="store_true", help="list available voices and exit")
+    ap.add_argument("--token")
+    ap.add_argument("--out", help="write a single concatenated WAV here instead of playing")
+    ap.add_argument("--no-play", action="store_true", help="synthesise only, write nothing")
+    ap.add_argument("--raw", action="store_true", help="read the text verbatim, no cleaning")
+    ap.add_argument("--preroll", type=int, metavar="MS",
+                    help="silence sent ahead of a cold first sentence (default %d)" % PREROLL_MS)
+    ap.add_argument("--stop", action="store_true",
+                    help="stop a run that is speaking, then exit (status 1 if silent)")
+    ap.add_argument("--verbose", "-v", action="store_true", help="print per-sentence timing")
+    args = ap.parse_args(argv)
+
+    if args.stop:
+        return 0 if stop_all() else 1
+
+    cfg = read_config()
+    voice = args.voice or os.environ.get("VOICE_TTS_VOICE") or cfg.get("voice") or DEFAULT_VOICE
+    speed = args.speed
+    if speed is None:
+        speed = float(os.environ.get("VOICE_TTS_SPEED") or cfg.get("speed", 1.0))
+    url = args.url or os.environ.get("VOICE_TTS_URL") or cfg.get("url") or DEFAULT_URL
+    token = read_token(args.token)
+
+    if args.voices:
+        req = urllib.request.Request(
+            f"{url.rstrip('/')}/v1/audio/voices",
+            headers={"Authorization": f"Bearer {token}"} if token else {},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+        print(" ".join(data["voices"]))
+        print(f"default: {data['default']}", file=sys.stderr)
+        return 0
+
+    if args.text:
+        raw = " ".join(args.text)
+    elif args.clipboard:
+        raw = subprocess.run(["wl-paste", "--no-newline"], capture_output=True,
+                             text=True, check=True).stdout
+    elif args.file:
+        raw = Path(args.file).read_text(encoding="utf-8", errors="replace")
+    else:
+        raw = sys.stdin.read()
+    text = raw if args.raw else strip_unspoken(raw)
+    if not text:
+        print("say: nothing speakable in the input", file=sys.stderr)
+        return 2
+
+    sentences = split_sentences(text)
+
+    chunks: queue.Queue = queue.Queue()
+    done = threading.Event()
+    failure: list[BaseException] = []
+
+    def producer():
+        try:
+            for i, sentence in enumerate(sentences):
+                t0 = time.perf_counter()
+                pcm = synth(sentence, url=url, token=token, voice=voice, speed=speed)
+                chunks.put((i, sentence, pcm, time.perf_counter() - t0))
+        except BaseException as exc:  # noqa: BLE001 - surfaced in the consumer
+            failure.append(exc)
+        finally:
+            done.set()
+
+    playing = not args.out and not args.no_play
+    preroll = args.preroll if args.preroll is not None else int(cfg.get("preroll", PREROLL_MS))
+    wake = SinkWake() if playing else None
+    if wake:
+        wake.start()
+    cold = False
+    player = None
+
+    threading.Thread(target=producer, daemon=True).start()
+
+    collected: list[bytes] = []
+    first_audio_at = None
+    t_start = time.perf_counter()
+
+    while True:
+        try:
+            i, sentence, pcm, took = chunks.get(timeout=0.1)
+        except queue.Empty:
+            if done.is_set():
+                break
+            continue
+        if args.verbose:
+            print(f"[{i + 1}/{len(sentences)}] {took * 1000:.0f} ms · {len(pcm) // 48} ms "
+                  f"audio · {sentence[:60]!r}", file=sys.stderr)
+        if first_audio_at is None:
+            first_audio_at = time.perf_counter() - t_start
+        if args.out:
+            collected.append(pcm)
+        elif playing:
+            if player is None:
+                cold = wake.cold if wake.join_ready() else True
+                if args.verbose and cold:
+                    print(f"sink was asleep: {preroll} ms of lead-in silence", file=sys.stderr)
+                player = Player(rate=24000, preroll_ms=preroll, cold=cold)
+            player.write(pcm)
+
+    if player is not None:
+        player.close()
+    if failure:
+        raise failure[0]
+
+    if args.out:
+        write_wav(args.out, b"".join(collected))
+        print(f"say: wrote {args.out}", file=sys.stderr)
+    if args.verbose and first_audio_at is not None:
+        print(f"first audio after {first_audio_at * 1000:.0f} ms", file=sys.stderr)
+    return 0
+
+
+def write_wav(path: str, pcm: bytes, rate: int = 24000):
+    import wave
+
+    with wave.open(path, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(pcm)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

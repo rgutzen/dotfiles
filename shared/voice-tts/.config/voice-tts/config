@@ -1,0 +1,11 @@
+# voice-tts defaults, stowed from 02_AREAS/B_Tech/dotfiles/shared/voice-tts/
+# The bearer token lives in ~/.config/pazras/voice-tts.env, never here.
+# Kokoro's speed is a time-stretch of the same waveform: 1.0 reads as recorded,
+# 1.2 is 20% faster and is the default because 1.0 loses attention first.
+url = http://127.0.0.1:8001
+voice = af_heart
+speed = 1.2
+# A cold Bluetooth sink swallows the first fraction of a second. `say` wakes it
+# before synthesising; preroll is the silence that covers the rest. Raise it if
+# the first word is still clipped, drop it to 0 once the sink stays warm.
+preroll = 300

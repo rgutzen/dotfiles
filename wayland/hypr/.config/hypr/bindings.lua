@@ -37,4 +37,8 @@ o.bind("SUPER + ALT + P", "herdr personal", "xdg-terminal-exec herdr-session per
 o.bind("SUPER + ALT + W", "herdr work", "xdg-terminal-exec herdr-session work")
 
 -- voxtype: one hotkey; herdr-voice turns a leading "herdr <verb>" into a command.
-o.bind("SUPER + SHIFT + L", "Dictate", "voxtype record toggle")
+-- voice-record stops any speech first, so the microphone hears the room.
+o.bind("SUPER + SHIFT + L", "Dictate", "voice-record")
+
+-- speech out: speak the selection, same key stops playback (voice-out V2).
+o.bind("SUPER + ALT + L", "Speak selection", "speak-selection")
