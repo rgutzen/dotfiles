@@ -117,6 +117,45 @@ def counted(n: int, noun: str, plural: str | None = None) -> str:
     return f"{words(n)} {noun if n == 1 else (plural or noun + 's')}"
 
 
+_MONTHS = ("January February March April May June July August September October "
+           "November December").split()
+
+
+def ordinal(n: int) -> str:
+    """28 -> "28th": the digits stay, the suffix is what a voice says."""
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def say_date(m: re.Match) -> str:
+    year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return m.group(0)
+    return f"{_MONTHS[month - 1]} {ordinal(day)} {year}"
+
+
+DATE = re.compile(r"(?<![\w-])(\d{4})-(\d{2})-(\d{2})(?!\d)")
+ID_RANGE = re.compile(r"(?<![\w-])([A-Z]+\d+[a-z]?)-([A-Z]+\d+[a-z]?)(?![\w-])")   # M0-M4
+NUM_RANGE = re.compile(r"(?<![\w.-])(\d{1,3})-(\d{1,3})(?![\w.-])")                # 1-2
+WORD_HYPHEN = re.compile(r"(?<![\w-])([A-Za-z]+(?:-[A-Za-z]+)+)(?![\w-])")         # per-item
+
+
+def spoken_words(text: str) -> str:
+    """Dates, ranges and hyphens as a voice says them; digits are kept.
+
+    A hyphen inside a word of letters is read as a space ("per item"). A word
+    that holds a digit or an underscore is an identifier and keeps its hyphens.
+    """
+    text = DATE.sub(say_date, text)
+    text = ID_RANGE.sub(r"\1 to \2", text)
+    text = NUM_RANGE.sub(r"\1 to \2", text)
+    text = WORD_HYPHEN.sub(lambda m: m.group(1).replace("-", " "), text)
+    text = re.sub(r"(?<![\w-])vs\.?(?=\s)", "versus", text)
+    text = re.sub(r"(?<![\w/.])(\d+)/(\d+)(?![\w/.])", r"\1 of \2", text)   # 12/12 done
+    text = re.sub(r"\u00a7\s*", "section ", text)
+    return text
+
+
 def listed(items: list[str]) -> str:
     """a, b and c"""
     if len(items) <= 1:
@@ -126,7 +165,7 @@ def listed(items: list[str]) -> str:
 
 # ------------------------------------------------------------------ tokens
 
-_SEG = r"(?:[\w.@+*$-]|\{[^}\s/]*\})+"
+_SEG = r"(?:[\w.@+*$-]|\{[^}\s/]*\}|<[\w-]+>)+"
 PATH = re.compile(rf"(?<![\w/:.~])((?:~|\.{{1,2}})?/?(?:{_SEG}/)+(?:{_SEG})?/?)(?![\w/])")
 URL = re.compile(r"<?(https?://[^\s<>)\]]+)>?")
 HEX = re.compile(r"^[0-9a-fA-F]{12,}$")
@@ -158,15 +197,46 @@ def is_long_token(tok: str) -> bool:
     return False
 
 
+FILE_KINDS = {
+    "md": "markdown", "py": "Python", "sh": "shell", "ts": "TypeScript",
+    "js": "JavaScript", "json": "JSON", "jsonl": "JSON lines", "yaml": "YAML",
+    "yml": "YAML", "toml": "TOML", "lua": "Lua", "txt": "text", "csv": "CSV",
+    "html": "HTML", "svg": "SVG", "png": "PNG", "wav": "WAV", "onnx": "ONNX",
+    "service": "unit", "timer": "timer unit", "env": "env", "log": "log",
+}
+FILE_NAME = re.compile(r"(?<![\w/.~-])([\w][\w.-]*?)\.(%s)(?![\w/-])" % "|".join(FILE_KINDS))
+
+
+def say_file(name: str) -> str:
+    """`DATA-ARCHITECTURE.md` -> "DATA-ARCHITECTURE markdown file"."""
+    m = re.fullmatch(r"(.+?)\.(%s)" % "|".join(FILE_KINDS), name)
+    if not m:
+        return spoken_words(name)
+    return f"{spoken_words(m.group(1))} {FILE_KINDS[m.group(2)]} file"
+
+
 def say_path(tok: str) -> str:
-    """`~/.local/bin/say` -> "say, in local bin": the name, then where it lives."""
+    """The name, then where it lives, outermost folder first.
+
+        ~/.local/bin/say        -> "say in local bin"
+        memory/knowledge/       -> "the folder knowledge in memory"
+        dev/<track>/SPECS.md    -> "SPECS markdown file in dev tracks"
+    """
+    folder = tok.endswith("/")
     tok = re.sub(r"\{([^}]*)\}", lambda m: " or ".join(m.group(1).split(",")), tok)
+    tok = re.sub(r"<([\w-]+)>", r"\1s", tok)             # a placeholder is "any of them"
     segs = [s for s in tok.rstrip("/").split("/") if s not in ("", "~", ".", "..")]
     segs = [s.lstrip(".$") or s for s in segs if s != "*" and s != "**"]
     if not segs:
         return "a path"
-    base, parent = segs[-1], segs[:-1][-2:]
-    return f"{base}, in {' '.join(parent)}" if parent else base
+    base, parent = segs[-1], [spoken_words(p) for p in segs[:-1][-2:]]
+    name = f"the folder {spoken_words(base)}" if folder else say_file(base)
+    return f"{name} in {' '.join(parent)}" if parent else name
+
+
+def path_name(tok: str) -> str:
+    """Only the name part of `say_path`."""
+    return say_path(tok).split(" in ")[0]
 
 
 def say_url(url: str) -> str:
@@ -193,9 +263,15 @@ def inline(text: str) -> str:
             return say_url(s)
         if is_path(s) or ("/" in s and re.fullmatch(r"[\w.~/-]+", s)):  # in code, a slash is a path
             return say_path(s)
+        if FILE_NAME.fullmatch(s):
+            return say_file(s)
         if is_long_token(s):
             return "a long identifier"
         return s
+
+    def reference(m: re.Match) -> str:
+        """A parenthesis that holds only a pointer: said as an aside, with pauses."""
+        return hold(f"; in parentheses {m.group(1)};")
 
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     text = re.sub(r"^\s{0,3}>\s?", "", text, flags=re.M)                      # quotes
@@ -203,18 +279,24 @@ def inline(text: str) -> str:
     text = re.sub(r"!\[([^\]]*)\]\([^)]*\)",
                   lambda m: hold("an image" + (f", {m.group(1)}" if m.group(1) else "")), text)
     text = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", text)               # [[leaf|label]]
-    text = re.sub(r"\[\[([^\]]+)\]\]", lambda m: m.group(1).replace("-", " "), text)
+    text = re.sub(r"\(\s*\[\[([^\]]+)\]\]\s*\)", reference, text)                # ([[leaf]])
+    text = re.sub(r"\[\[([^\]]+)\]\]", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)                      # links -> label
     text = URL.sub(lambda m: hold(say_url(m.group(1))), text)
-    text = PATH.sub(lambda m: hold(say_path(m.group(1))) if is_path(m.group(1)) else m.group(1),
-                    text)
+    def path(m: re.Match) -> str:
+        tok, end = re.match(r"(.*?)([.,;:]*)$", m.group(1)).groups()   # a full stop is not the path's
+        return hold(say_path(tok)) + end if is_path(tok) else m.group(1)
+
+    text = PATH.sub(path, text)
+    text = FILE_NAME.sub(lambda m: hold(say_file(m.group(0))), text)
     text = re.sub(r"\S+", lambda m: hold("a long identifier") if is_long_token(m.group(0))
                   else m.group(0), text)
+    text = spoken_words(text)
     text = re.sub(r"<br\s*/?>", ", ", text)
     text = re.sub(r"</?[a-zA-Z][^>]*>", "", text)
     text = re.sub(r"(?<!\w)(\*\*|__|\*|_)(?=\S)(.+?)(?<=\S)\1(?!\w)", r"\2", text,
                   flags=re.S)                                                # emphasis, not a_b
-    text = re.sub(r"(?<=\w)\u2013(?=\w)", " to ", text)                      # V1–V2
+    text = re.sub(r"(?<=[\w\x00])\s*\u2013\s*(?=[\w\x00])", " to ", text)        # V1–V2
     text = re.sub(r"\s*[\u2014\u2013]\s*", ", ", text)                        # dash -> pause
     text = re.sub(r"\s*(?:\u2192|->|=>)\s*", " to ", text)
     text = re.sub(r"\s*\u2190\s*", " from ", text)
@@ -222,6 +304,7 @@ def inline(text: str) -> str:
     text = re.sub(r"\u2264\s*", "at most ", text)
     text = re.sub(r"(?<!\w)~\s*(?=\d)", "about ", text)
     text = re.sub(r"(?<=\d)\s*\u00d7\s*(?=\d)", " times ", text)
+    text = re.sub(r"(?<=\d)\u00d7", " times", text)                           # 2.1×
     text = text.replace("\u2705", "yes").replace("\u274c", "no")
     text = re.sub(r"\s*[\u00b7\u2022]\s*", ", ", text)                        # · separators
     text = re.sub(r"[\u25aa\u25ab\u2581-\u2588\u25cf\u25cb\u2591-\u2593]", " ", text)
@@ -229,7 +312,8 @@ def inline(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)
     text = re.sub(r"([,;:])(\s*[,;:])+", r"\1", text)
-    return text.strip(" ,")
+    text = re.sub(r";\s*([.!?])", r"\1", text)
+    return text.strip(" ,;")
 
 
 def sentence(text: str) -> str:
@@ -394,7 +478,10 @@ def rewrite(block: Block) -> str:
         out = _RULES[block.kind](block)
     except Exception:  # noqa: BLE001 - a bug in one rule must not drop the block
         out = sentence(strip_unspoken(block.text))
-    return out or "a passage with nothing to read aloud."
+    out = out or "a passage with nothing to read aloud."
+    if block.kind not in ("prose", "bullets", "heading"):
+        out = out[:1].upper() + out[1:]                  # a description starts a sentence
+    return out
 
 
 def _prose(b: Block) -> str:
@@ -405,8 +492,14 @@ def _heading(b: Block) -> str:
     return sentence(inline(b.text))
 
 
+NUMBERED = re.compile(r"^\s*(\d+)[.)]\s+")
+
+
 def _bullets(b: Block) -> str:
-    parts = [sentence(inline(item)) for item in _items(b.text)]
+    """A bullet is its sentence; a numbered item keeps its number: "1, the answer"."""
+    marks = [NUMBERED.match(l) for l in b.text.split("\n") if BULLET.match(l)]
+    parts = [sentence((f"{m.group(1)}, " if m else "") + inline(item))
+             for m, item in zip(marks, _items(b.text))]
     return " ".join(p for p in parts if p)
 
 
@@ -416,13 +509,41 @@ def _table(b: Block) -> str:
     head = ["number" if c == "#" else inline(c) for c in _cells(rows[0])] if rows else []
     named = [h for h in head if h]
     cols = counted(len(head), "column")
-    if not named:
-        what = f"a table, {cols}"
-    elif len(named) <= 6:
-        what = f"a table, {cols}: {', '.join(named)},"
+    rows_n = counted(len(body), "row")
+    if named:
+        out = [f"a table with {cols}: {'; '.join(named)}; and {rows_n}."]
     else:
-        what = f"a table, {cols}, starting with {', '.join(named[:4])},"
-    return f"{what} and {counted(len(body), 'row')}."
+        out = [f"a table with {cols} and {rows_n}."]
+    for n, row in enumerate(body, 1):
+        out.append(_table_row(head, [inline(c) for c in _cells(row)], n))
+    return " ".join(out)
+
+
+VERB_HEADERS = {"does", "runs", "has", "means", "needs", "takes", "uses", "reads",
+                "writes", "decides", "returns", "goes", "says"}
+
+
+def _said(header: str, cell: str) -> str:
+    """'Concerns are …', 'Status is …': the header's own number decides.
+
+    A header that is itself a verb ("Runs", "Does") takes a colon instead.
+    """
+    if header.lower() in VERB_HEADERS:
+        return f"{header}: {cell}"
+    plural = re.search(r"[^su]s$", header) is not None
+    return f"{header} {'are' if plural else 'is'} {cell}"
+
+
+def _table_row(head: list[str], cells: list[str], n: int) -> str:
+    """For Track M, Concerns are …; Status is …; Detail is …"""
+    cells = [c.rstrip(".") for c in cells]                 # the row's own punctuation joins them
+    pairs = [(h, c) for h, c in zip(head + [""] * len(cells), cells)]
+    if not any(c for _, c in pairs):
+        return f"Row {words(n)} is empty."
+    (h0, c0), rest = pairs[0], [(h, c) for h, c in pairs[1:] if c]
+    lead = f"For {h0} {c0}" if h0 and c0 else f"Row {words(n)}" + (f", {c0}" if c0 else "")
+    said = [_said(h, c) if h else c for h, c in rest]
+    return sentence(lead + (", " + "; ".join(said) if said else ""))
 
 
 def _cells(row: str) -> list[str]:
@@ -447,7 +568,7 @@ def _diff(b: Block) -> str:
         m = (re.match(r"^\+\+\+ (?:[a-z]/)?(\S+)", r)      # b/, or w/ with mnemonic prefixes
              or re.match(r"^diff --git \S+ (?:[a-z]/)?(\S+)", r))
         if m and m.group(1) != "/dev/null":
-            name = say_path(m.group(1)).split(",")[0]
+            name = path_name(m.group(1))
             if name not in files:
                 files.append(name)
     added = sum(1 for r in rows if r.startswith("+") and not r.startswith("+++"))
@@ -519,6 +640,30 @@ def spoken(text: str) -> str:
     return "\n".join(rewrite(b) for b in classify(text))
 
 
+HEADING_PAUSE_MS = 500    # before and after a heading
+BLOCK_PAUSE_MS = 250      # between two other blocks
+
+
+def segments(text: str) -> list[tuple[str, int]]:
+    """The spoken blocks, each with the silence that follows it, in ms.
+
+    A voice reads a heading into the next sentence unless a pause separates
+    them, and punctuation cannot make one: `say` sends one sentence per request,
+    so the silence is the player's to insert (N4).
+    """
+    out: list[tuple[str, int]] = []
+    for block in classify(text):
+        heading = block.kind == "heading"
+        if heading and out:
+            out[-1] = (out[-1][0], max(out[-1][1], HEADING_PAUSE_MS))
+        out.append((rewrite(block), HEADING_PAUSE_MS if heading else BLOCK_PAUSE_MS))
+    return out
+
+
 def digits(text: str) -> list[str]:
-    """The runs of digits in `text`, sorted: the invariant's currency."""
-    return sorted(re.findall(r"\d+", text))
+    """The numbers in `text` by value, sorted: the invariant's currency.
+
+    By value, so a date's "09" said as "9th" is the same number. A number in
+    the output that the input lacks is the failure this guards against.
+    """
+    return sorted(str(int(d)) for d in re.findall(r"\d+", text))
