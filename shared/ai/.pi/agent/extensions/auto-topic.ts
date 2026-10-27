@@ -134,6 +134,9 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("input", (event, ctx) => {
     if (event.source !== "interactive") return;
+    // TUI only: print/RPC/JSON runs are headless and often --no-session, so a
+    // title is never seen -- and their first prompt can be a whole transcript.
+    if (ctx?.mode !== "tui") return;
     const text = event.text.trim();
     if (!text || /^[/!$]/.test(text)) return; // commands are not topics
     if (pi.getSessionName()) return; // /name, --name or this extension already named it
@@ -151,6 +154,7 @@ export default function (pi: ExtensionAPI) {
   /** Retry once if the model was unreachable when the prompt arrived. */
   pi.on("agent_settled", (_event, ctx) => {
     if (!cfg.refine || refined || attempts >= 2) return;
+    if (ctx?.mode !== "tui") return;
     if (!mine || pi.getSessionName() !== mine) return;
     const prompt = firstUserText(ctx);
     if (!prompt) return;
@@ -171,7 +175,8 @@ export default function (pi: ExtensionAPI) {
         systemPrompt:
           `Rewrite the session's first prompt as a topic of at most ${c.maxWords} words. ` +
           "Reply with the topic only: no quotes, no trailing punctuation, no explanation.",
-        messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
+        // A topic needs the opening, not the whole prompt; this bounds a 4B model's load.
+        messages: [{ role: "user", content: prompt.slice(0, 2000), timestamp: Date.now() }],
       },
       { maxTokens: 32, temperature: 0.2, signal: AbortSignal.timeout(20_000) },
     );
