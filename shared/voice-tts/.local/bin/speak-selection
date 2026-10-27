@@ -19,6 +19,9 @@
 #
 # Diagnosis: $XDG_RUNTIME_DIR/voice-tts/speak-selection.log has one line per
 # press: the source that won, both ages, the size and a hash. Never the text.
+# A failure is a notification (`say --notify`): a key has no terminal to print
+# to. An empty selection is one too, "nothing to speak"; a password manager's
+# selection is not, since declining it is the design and not a fault.
 set -uo pipefail
 
 dir="${XDG_RUNTIME_DIR:-/tmp}/voice-tts"
@@ -74,10 +77,11 @@ for src in "${order[@]}"; do
 done
 
 if [[ -z "$text" ]]; then
-    # Silence is the right answer: the operator pressed a key, not a question.
+    # Both selections are empty: say reports "nothing to speak", rate-limited.
     record none 0
+    say --notify </dev/null >/dev/null 2>&1
     exit 0
 fi
 
 record "$used" "${#text}" "$(printf '%s' "$text" | sha1sum | cut -c1-8)"
-printf '%s' "$text" | say
+printf '%s' "$text" | say --notify

@@ -7,5 +7,15 @@
 # machine should be quiet.
 set -uo pipefail
 
+#
+# `say --stop` exits 1 when nothing was speaking, which is not a failure. A
+# failed toggle is: the key has no terminal, so its cause becomes a notification.
+
 say --stop >/dev/null 2>&1 || true
-exec voxtype record toggle
+if ! out="$(voxtype record toggle 2>&1)"; then
+    notify-send --app-name=voice-record "Dictation failed" \
+        "$(printf '%s' "${out:-voxtype record toggle failed}" | head -n 1)" 2>/dev/null || true
+    exit 1
+fi
+[[ -n $out ]] && printf '%s\n' "$out"
+exit 0

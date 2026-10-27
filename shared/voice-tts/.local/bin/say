@@ -13,6 +13,10 @@ an artifact and it reads the prose, skipping what cannot be spoken.
 
 Text that is not speech is dropped on the way in: fenced code, tables, bare URLs
 and markdown syntax. Pronunciation of paths and symbols is not attempted.
+
+A failure prints its cause to stderr. A key binding has no terminal, so the bind
+scripts pass `--notify`: each failure also becomes one desktop notification,
+at most one per cause every 30 s, and a success stays quiet.
 """
 
 from __future__ import annotations
@@ -40,11 +44,61 @@ ENV_FILE = os.path.expanduser("~/.config/pazras/voice-tts.env")
 MAX_SENTENCE = 220  # characters; longer units are split at clause boundaries
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice-tts"
 PREROLL_MS = 300  # silence in front of a cold first sentence; see wake_sink()
+NOTIFY_EVERY_S = 30  # one notification per cause per this many seconds
 
 ABBREVIATIONS = {
     "e.g", "i.e", "vs", "etc", "cf", "al", "approx", "fig", "no", "dr", "mr",
     "mrs", "ms", "st", "jr", "sr", "inc", "ltd", "v", "p", "pp", "sec", "min",
 }
+
+
+# ------------------------------------------------------------------ failures
+
+
+class Failure(Exception):
+    """A run that could not speak. `cause` names the class a notification is
+    rate-limited by: unreachable, token, service, sink, empty, input."""
+
+    def __init__(self, cause: str, message: str):
+        super().__init__(message)
+        self.cause = cause
+        self.message = message
+
+
+def notify(cause: str, message: str, *, now: float | None = None,
+           state: Path | None = None) -> bool:
+    """One desktop notification for a failure, unless this cause had one recently.
+
+    The state file holds the time of the last notification per cause, so a key
+    pressed five times at a dead service says so once. `now` and `state` are
+    there for the tests: nothing has to sleep to cross the window.
+    """
+    now = time.time() if now is None else now
+    state = state or RUNTIME_DIR / "notified.state"   # not *.json: that is the registry
+    try:
+        seen = json.loads(state.read_text())
+        if not isinstance(seen, dict):
+            seen = {}
+    except (OSError, ValueError):
+        seen = {}
+    last = seen.get(cause)
+    if isinstance(last, (int, float)) and 0 <= now - last < NOTIFY_EVERY_S:
+        return False
+    seen[cause] = now
+    try:
+        state.parent.mkdir(parents=True, exist_ok=True)
+        tmp = state.with_name(f".{state.name}.{os.getpid()}")
+        tmp.write_text(json.dumps(seen))
+        tmp.replace(state)
+    except OSError:
+        pass
+    line = (message.splitlines() or [cause])[0][:200]
+    try:
+        subprocess.run(["notify-send", "--app-name=say", "Speech failed", line],
+                       capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
 
 
 # ------------------------------------------------------------------ text shaping
@@ -156,10 +210,14 @@ def synth(text: str, *, url: str, token: str, voice: str, speed: float) -> bytes
         with urllib.request.urlopen(req, timeout=120) as resp:
             return resp.read()
     except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            raise Failure("token", f"bad token for {url}; check ~/.config/pazras/voice-tts.env")
         detail = exc.read().decode("utf-8", "replace")[:200]
-        raise SystemExit(f"say: {exc.code} from {url}: {detail}")
+        raise Failure("service", f"{exc.code} from {url}: {detail}")
     except urllib.error.URLError as exc:
-        raise SystemExit(f"say: cannot reach {url} ({exc.reason}); is voice-tts running?")
+        raise Failure("unreachable", f"cannot reach {url} ({exc.reason}); is voice-tts running?")
+    except OSError as exc:  # reset or timeout mid-reply: the service went away
+        raise Failure("unreachable", f"lost {url} mid-reply ({exc}); is voice-tts running?")
 
 
 def sink_suspended() -> bool:
@@ -221,11 +279,14 @@ class Player:
 
     def __init__(self, rate: int = 24000, preroll_ms: int = PREROLL_MS, cold: bool = False):
         self.rate = rate
-        self.proc = subprocess.Popen(
-            ["pw-cat", "--playback", "--raw", "--rate", str(rate), "--channels", "1",
-             "--format", "s16", "-"],
-            stdin=subprocess.PIPE,
-        )
+        try:
+            self.proc = subprocess.Popen(
+                ["pw-cat", "--playback", "--raw", "--rate", str(rate), "--channels", "1",
+                 "--format", "s16", "-"],
+                stdin=subprocess.PIPE,
+            )
+        except OSError as exc:
+            raise Failure("sink", f"cannot start pw-cat ({exc.strerror})")
         self.first = True
         self.silence = b"\x00\x00" * int(rate * max(0, preroll_ms) / 1000) if cold else b""
         self.register()
@@ -239,7 +300,11 @@ class Player:
             self.proc.stdin.write(pcm)
             self.proc.stdin.flush()
         except BrokenPipeError:
-            raise SystemExit("say: playback stopped")
+            # Not a stop: `say --stop` kills this process before its player.
+            code = self.proc.wait()
+            unregister()
+            raise Failure("sink", f"playback failed: pw-cat exited with {code}; "
+                                  "is a sink available?")
 
     def close(self):
         try:
@@ -249,7 +314,8 @@ class Player:
         code = self.proc.wait()
         unregister()
         if code != 0:
-            raise SystemExit("say: pw-cat failed to play; is a sink available?")
+            raise Failure("sink", f"playback failed: pw-cat exited with {code}; "
+                                  "is a sink available?")
 
     # -- registry, so `say --stop` and the selection bind can interrupt it
     def register(self):
@@ -399,6 +465,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--resume", action="store_true", help="continue a paused run")
     ap.add_argument("--toggle-pause", action="store_true",
                     help="pause if speaking, resume if paused (status 1 if neither)")
+    ap.add_argument("--notify", action="store_true",
+                    help="also report a failure as a desktop notification (for key binds)")
     ap.add_argument("--verbose", "-v", action="store_true", help="print per-sentence timing")
     args = ap.parse_args(argv)
 
@@ -430,19 +498,40 @@ def main(argv: list[str]) -> int:
         print(f"default: {data['default']}", file=sys.stderr)
         return 0
 
+    try:
+        return speak(args, cfg=cfg, voice=voice, speed=speed, url=url, token=token)
+    except Failure as exc:
+        print(f"say: {exc.message}", file=sys.stderr)
+        if args.notify:
+            notify(exc.cause, exc.message)
+        return 2 if exc.cause == "empty" else 1
+    except Exception as exc:  # a bug, not a cause: still never silent at a key
+        if args.notify:
+            notify("error", f"{type(exc).__name__}: {exc}")
+        raise
+
+
+def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
+          token: str) -> int:
+    """Read the input, then synthesise and play it sentence by sentence."""
     if args.text:
         raw = " ".join(args.text)
     elif args.clipboard:
-        raw = subprocess.run(["wl-paste", "--no-newline"], capture_output=True,
-                             text=True, check=True).stdout
+        try:
+            raw = subprocess.run(["wl-paste", "--no-newline"], capture_output=True,
+                                 text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise Failure("input", f"cannot read the clipboard ({exc})")
     elif args.file:
-        raw = Path(args.file).read_text(encoding="utf-8", errors="replace")
+        try:
+            raw = Path(args.file).read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise Failure("input", f"cannot read {args.file} ({exc.strerror})")
     else:
         raw = sys.stdin.read()
     text = raw if args.raw else strip_unspoken(raw)
     if not text:
-        print("say: nothing speakable in the input", file=sys.stderr)
-        return 2
+        raise Failure("empty", "nothing to speak: the input has no speakable text")
 
     sentences = split_sentences(text)
 
