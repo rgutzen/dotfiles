@@ -6,13 +6,14 @@
 # mechanical step — see timers-gen.sh header.
 
 [Unit]
-Description=System health check — stow links, derived-file drift, timer results, mounts
+Description=Weekly health check — the daily tier plus the test suites, updates and the network
 Documentation=file:%h/06_SYSTEM/memory/knowledge/system/checks/healthcheck.md
 OnFailure=notify@%n.service
 
 [Service]
 Type=oneshot
-Environment=PATH=%h/.miniforge3/bin:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/06_SYSTEM/engine/familiar checks healthcheck
+Environment=PATH=%h/.miniforge3/bin:%h/.local/share/mise/shims:%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/06_SYSTEM/engine/familiar checks healthcheck --tier weekly
 Nice=15
 IOSchedulingClass=idle
+TimeoutStartSec=30m
