@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# voice-selection-watch -- record WHEN each selection last changed, never WHAT.
+#
+# WHY. `speak-selection` has to choose between the primary selection (mouse
+# select in most GUI apps) and the clipboard (copy, and every app that captures
+# the mouse and copies for you, herdr included). Wayland publishes no timestamp
+# for either, and an app that sets one leaves the other holding whatever was
+# there before: a primary selection from last week outlives a hundred copies. A
+# fixed preference is wrong as soon as the habit moves between apps. Recency is
+# the rule that holds, and recency needs a witness. This is the witness.
+#
+# It keeps two integers, nanoseconds since the epoch:
+#
+#     $XDG_RUNTIME_DIR/voice-tts/primary.at
+#     $XDG_RUNTIME_DIR/voice-tts/clipboard.at
+#
+# and drains each selection into /dev/null as it arrives. Nothing selected is
+# written anywhere. The directory is tmpfs, mode 700, and goes at logout.
+#
+# Two properties of `wl-paste --watch` shape the handler:
+#   - It replays the *current* selection to a freshly started watcher. That is
+#     not a change, so events in the first two seconds are not stamped; after a
+#     restart the old stamps stay true.
+#   - It also fires for a cleared selection (CLIPBOARD_STATE=nil or clear). An
+#     empty selection is not "newer", so only data and sensitive data stamp. A
+#     sensitive copy must stamp: it is the newest selection, and
+#     `speak-selection` ends the run on it instead of falling back to an older
+#     sentence.
+set -uo pipefail
+
+dir="${XDG_RUNTIME_DIR:-/tmp}/voice-tts"
+mkdir -p "$dir" && chmod 700 "$dir"
+
+GRACE_NS=2000000000
+start="$(date +%s%N)"
+
+# Run by wl-paste once per change, selection on stdin.
+#   $1 stamp file    $2 start time (ns)    $3 grace (ns)
+handler="$(cat <<'EOF'
+now=$(date +%s%N)
+case "${CLIPBOARD_STATE:-data}" in
+    data|sensitive)
+        if [ $((now - $2)) -ge "$3" ]; then
+            printf '%s\n' "$now" > "$1.tmp" && mv -f "$1.tmp" "$1"
+        fi ;;
+esac
+cat > /dev/null
+EOF
+)"
+
+wl-paste --primary --type text --watch sh -c "$handler" sh "$dir/primary.at"   "$start" "$GRACE_NS" &
+wl-paste           --type text --watch sh -c "$handler" sh "$dir/clipboard.at" "$start" "$GRACE_NS" &
+
+trap 'exit 143' TERM INT
+trap 'kill $(jobs -p) 2>/dev/null' EXIT
+
+# One watcher gone means half the signal is gone: exit, and let systemd restart both.
+wait -n
+exit $?

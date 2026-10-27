@@ -22,6 +22,7 @@ import json
 import os
 import queue
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -267,6 +268,49 @@ def unregister():
         pass
 
 
+def _state(pid: int) -> str:
+    """Single-letter process state from /proc, or "" if it is gone."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().split(") ", 1)[1][0]
+    except (OSError, IndexError):
+        return ""
+
+
+def signal_players(sig: int, *, only_state: str | None = None) -> int:
+    """Send `sig` to every live player in the registry. Returns how many."""
+    acted = 0
+    try:
+        entries = list(RUNTIME_DIR.glob("*.json"))
+    except OSError:
+        return 0
+    for entry in entries:
+        try:
+            pid = int(json.loads(entry.read_text()).get("player") or 0)
+        except (OSError, ValueError, TypeError):
+            entry.unlink(missing_ok=True)
+            continue
+        if not pid or not _is_speech(pid):
+            entry.unlink(missing_ok=True)
+            continue
+        if only_state is not None and _state(pid) != only_state:
+            continue
+        try:
+            os.kill(pid, sig)
+            acted += 1
+        except OSError:
+            pass
+    return acted
+
+
+def pause_or_resume() -> int:
+    """SIGSTOP a running player, or SIGCONT a stopped one — one key, two jobs."""
+    if signal_players(signal.SIGSTOP, only_state="S"):
+        return 0
+    if signal_players(signal.SIGCONT, only_state="T"):
+        return 0
+    return 1
+
+
 def stop_all() -> int:
     """Kill every live run. Returns how many were stopped."""
     stopped = 0
@@ -288,6 +332,12 @@ def stop_all() -> int:
             entry.unlink(missing_ok=True)
             continue
         stopped += 1
+        for pid in pids:  # a stopped process holds SIGTERM until it is resumed
+            if _is_speech(pid) and _state(pid) == "T":
+                try:
+                    os.kill(pid, signal.SIGCONT)
+                except OSError:
+                    pass
         for sig in (15, 9):
             for pid in pids:
                 if not _is_speech(pid):
@@ -345,11 +395,21 @@ def main(argv: list[str]) -> int:
                     help="silence sent ahead of a cold first sentence (default %d)" % PREROLL_MS)
     ap.add_argument("--stop", action="store_true",
                     help="stop a run that is speaking, then exit (status 1 if silent)")
+    ap.add_argument("--pause", action="store_true", help="freeze playback where it is")
+    ap.add_argument("--resume", action="store_true", help="continue a paused run")
+    ap.add_argument("--toggle-pause", action="store_true",
+                    help="pause if speaking, resume if paused (status 1 if neither)")
     ap.add_argument("--verbose", "-v", action="store_true", help="print per-sentence timing")
     args = ap.parse_args(argv)
 
     if args.stop:
         return 0 if stop_all() else 1
+    if args.pause:
+        return 0 if signal_players(signal.SIGSTOP, only_state="S") else 1
+    if args.resume:
+        return 0 if signal_players(signal.SIGCONT, only_state="T") else 1
+    if args.toggle_pause:
+        return pause_or_resume()
 
     cfg = read_config()
     voice = args.voice or os.environ.get("VOICE_TTS_VOICE") or cfg.get("voice") or DEFAULT_VOICE

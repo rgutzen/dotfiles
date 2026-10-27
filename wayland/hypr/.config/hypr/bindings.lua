@@ -42,3 +42,5 @@ o.bind("SUPER + SHIFT + L", "Dictate", "voice-record")
 
 -- speech out: speak the selection, same key stops playback (voice-out V2).
 o.bind("SUPER + ALT + L", "Speak selection", "speak-selection")
+-- speech out: freeze where it is, press again to continue.
+o.bind("SUPER + ALT + M", "Pause speech", "say --toggle-pause")

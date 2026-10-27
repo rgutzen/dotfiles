@@ -4,7 +4,7 @@
 # 1.2 is 20% faster and is the default because 1.0 loses attention first.
 url = http://127.0.0.1:8001
 voice = af_heart
-speed = 1.2
+speed = 1.0
 # A cold Bluetooth sink swallows the first fraction of a second. `say` wakes it
 # before synthesising; preroll is the silence that covers the rest. Raise it if
 # the first word is still clipped, drop it to 0 once the sink stays warm.
