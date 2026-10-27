@@ -1,25 +1,83 @@
 #!/usr/bin/env bash
-# speak-selection -- speak whatever is selected; press again to stop.
+# speak-selection -- speak the newest selection; press again to stop.
 #
-# Bound to SUPER+ALT+L. The primary selection is read with wl-paste, so the text
-# never goes through the clipboard and never lands in a buffer.
+# Bound to SUPER+ALT+L.
+#
+# WHICH text. The primary selection and the clipboard can both hold text, and an
+# app that sets one leaves the other with an older sentence. The first version
+# of this script preferred the primary selection, so a primary selection nobody
+# had touched for a day was read aloud over every later copy. The newer of the
+# two wins now: `voice-selection-watch` records when each last changed and this
+# script reads those two stamps. Primary wins a tie and the absence of stamps.
+# The older selection is a fallback only when the newer one has gone empty.
+#
+# Secrets are never spoken. A selection flagged by a password manager ends the
+# run silently; falling back to something older would repeat a stale sentence.
+#
+# `say` speaks text and does not care where it came from. This script is the
+# decision about where, for one key.
+#
+# Diagnosis: $XDG_RUNTIME_DIR/voice-tts/speak-selection.log has one line per
+# press: the source that won, both ages, the size and a hash. Never the text.
 set -uo pipefail
+
+dir="${XDG_RUNTIME_DIR:-/tmp}/voice-tts"
+log="$dir/speak-selection.log"
 
 # A run already speaking means this press is "stop", not "speak again".
 if say --stop >/dev/null 2>&1; then
     exit 0
 fi
 
-# Primary selection first. Not every toolkit publishes one — an app that copies
-# on select may set only the clipboard — so the clipboard is the fallback, which
-# is what "select, copy, speak" already means to the operator.
-text="$(wl-paste --primary --no-newline 2>/dev/null || true)"
-if [[ -z "${text//[[:space:]]/}" ]]; then
-    text="$(wl-paste --no-newline 2>/dev/null || true)"
-fi
-if [[ -z "${text//[[:space:]]/}" ]]; then
+stamp() {   # nanoseconds of the last change of selection $1; 0 if never seen
+    local v=0
+    [[ -r "$dir/$1.at" ]] && v="$(<"$dir/$1.at")"
+    [[ $v =~ ^[0-9]+$ ]] || v=0
+    echo "$v"
+}
+
+now="$(date +%s%N)"
+p_at="$(stamp primary)"
+c_at="$(stamp clipboard)"
+
+age() {     # "12s" since stamp $1, or "never"
+    if (( $1 > 0 )); then echo "$(( (now - $1) / 1000000000 ))s"; else echo "never"; fi
+}
+
+record() {  # used, chars, hash
+    mkdir -p "$dir" 2>/dev/null || return 0
+    printf '%s used=%s primary=%s clipboard=%s chars=%s sha=%s\n' \
+        "$(date +%T)" "$1" "$(age "$p_at")" "$(age "$c_at")" "$2" "${3:--}" >> "$log"
+    tail -n 200 "$log" > "$log.tmp" 2>/dev/null && mv -f "$log.tmp" "$log"
+}
+
+if (( c_at > p_at )); then order=(clipboard primary); else order=(primary clipboard); fi
+
+text=""
+used="none"
+for src in "${order[@]}"; do
+    flag=()
+    [[ $src == primary ]] && flag=(--primary)
+
+    types="$(timeout 2 wl-paste "${flag[@]}" --list-types 2>/dev/null || true)"
+    if grep -qx 'x-kde-passwordManagerHint' <<<"$types"; then
+        record "$src:sensitive" 0
+        exit 0
+    fi
+
+    candidate="$(timeout 2 wl-paste "${flag[@]}" --no-newline 2>/dev/null || true)"
+    if [[ -n "${candidate//[[:space:]]/}" ]]; then
+        text="$candidate"
+        used="$src"
+        break
+    fi
+done
+
+if [[ -z "$text" ]]; then
     # Silence is the right answer: the operator pressed a key, not a question.
+    record none 0
     exit 0
 fi
 
+record "$used" "${#text}" "$(printf '%s' "$text" | sha1sum | cut -c1-8)"
 printf '%s' "$text" | say

@@ -261,6 +261,17 @@ if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; the
     if [[ -f "$HOME/.inbox-zero/.env" ]]; then
         systemctl --user enable --now inbox-zero.service >/dev/null 2>&1 && echo "  ✓ inbox-zero.service"
     fi
+    # voice-selection-watch.service: records when the primary selection and the
+    # clipboard last changed, so `speak-selection` (SUPER+ALT+L) speaks the newer
+    # one instead of whichever it happens to prefer. Its only prerequisite is
+    # wl-clipboard and a Wayland session; without the session `enable` still
+    # works and the unit starts at the next login. voice-tts.service is NOT
+    # enabled here: it needs a venv and 338 MB of model weights this script
+    # does not create (see memory/knowledge/system/harness/voice-local.md).
+    if command -v wl-paste >/dev/null && [[ "$SESSION" == "wayland" ]]; then
+        systemctl --user enable voice-selection-watch.service >/dev/null 2>&1 \
+            && echo "  ✓ voice-selection-watch.service"
+    fi
     # pazras-archive-flush.path is deliberately NOT enabled. The flush moves
     # data out of 05_ARCHIVES onto BigFish, where 05_ARCHIVES-EXTERNAL is still
     # single-copy (the archives-external restic repo waits on Disk B). An
