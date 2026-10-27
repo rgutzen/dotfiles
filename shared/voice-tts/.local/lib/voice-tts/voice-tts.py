@@ -43,7 +43,7 @@ MODEL_DIR = os.environ.get(
 )
 DEFAULT_VOICE = os.environ.get("VOICE_TTS_VOICE", "af_heart")
 MODEL_ID = "kokoro-82m"
-MAX_CHARS = 5000
+MAX_CHARS = 20000  # a request above this is refused with 413; `say` sends one sentence
 
 _model = None
 _voices: list[str] = []
@@ -127,6 +127,31 @@ class Handler(BaseHTTPRequestHandler):
         if Handler.access_log:
             sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
+    def log_request(self, code="-", size="-"):
+        """The request line plus what a speech request was: size, voice, time.
+
+        Never the text: the log is a journal anyone in the session can read.
+        """
+        extra = getattr(self, "_speech", None)
+        if extra is None:
+            return super().log_request(code, size)
+        self.log_message('"%s" %s %s', self.requestline, str(code), extra)
+
+    def handle_one_request(self):
+        """Serve one request; a client that has gone is a normal event.
+
+        `say --stop` kills the client while the service may still be writing
+        the sentence it asked for. The write raised BrokenPipeError out of the
+        handler, and socketserver printed a traceback for each one.
+        """
+        self._speech = None
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+            self.log_message('"%s" client gone before the reply was written',
+                             getattr(self, "requestline", "-"))
+
     def _json(self, code: int, obj: dict):
         body = json.dumps(obj).encode()
         self.send_response(code)
@@ -183,7 +208,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": {"message": "input is required"}})
         if len(text) > MAX_CHARS:
             return self._json(
-                400, {"error": {"message": f"input longer than {MAX_CHARS} characters"}}
+                413, {"error": {"message": f"input longer than {MAX_CHARS} characters"}}
             )
 
         voice = req.get("voice") or DEFAULT_VOICE
@@ -206,10 +231,12 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:  # noqa: BLE001 - a failed synthesis must not kill the service
             return self._json(500, {"error": {"message": f"{type(exc).__name__}: {exc}"}})
 
+        ms = (time.perf_counter() - t0) * 1000
+        self._speech = f"chars={len(text)} voice={voice} format={fmt} synth_ms={ms:.0f}"
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("X-Synthesis-Ms", f"{(time.perf_counter() - t0) * 1000:.0f}")
+        self.send_header("X-Synthesis-Ms", f"{ms:.0f}")
         self.end_headers()
         self.wfile.write(body)
 
