@@ -31,10 +31,13 @@ import json
 import os
 import queue
 import re
+import select
 import shutil
 import signal
+import struct
 import subprocess
 import sys
+import termios
 import threading
 import time
 import urllib.error
@@ -56,6 +59,16 @@ PREROLL_MS = 300  # silence in front of a cold first sentence; see wake_sink()
 NOTIFY_EVERY_S = 30  # one notification per cause per this many seconds
 HOLD_S = float(os.environ.get("VOICE_TTS_HOLD_S") or 30)  # an auto run held longer is dropped
 NOTIFY_MAX = 300  # characters of a notification body
+AHEAD = 3  # sentences synthesised ahead of the player; more is memory, not speed
+STALL_S = 2.0  # a running player that takes no audio for this long has lost its sink
+STALL_COLD_S = 8.0  # the same, before pw-cat has read anything: a Bluetooth link may still be waking
+PIPE_BYTES = 16384  # player pipe: ~340 ms of audio, so a stall shows within one sentence
+# Per-request limit on the service. A 200-220 character sentence took 3.1 to
+# 7.5 s in the service's own log (2026-10-25..28, under load), and the first
+# request may wait for the model to load. A restart is not a slow answer: the
+# connection is refused or reset at once, so it ends the run within the budget
+# anyway. Only a service that accepts and never answers waits this long.
+SYNTH_TIMEOUT_S = float(os.environ.get("VOICE_TTS_SYNTH_TIMEOUT_S") or 30)
 
 ABBREVIATIONS = {
     "e.g", "i.e", "vs", "etc", "cf", "al", "approx", "fig", "no", "dr", "mr",
@@ -352,7 +365,8 @@ def doctor(url: str, token: str) -> int:
     return 0
 
 
-def synth(text: str, *, url: str, token: str, voice: str, speed: float) -> bytes:
+def synth(text: str, *, url: str, token: str, voice: str, speed: float,
+          timeout: float = SYNTH_TIMEOUT_S) -> bytes:
     body = json.dumps(
         {"input": text, "voice": voice, "speed": speed, "response_format": "pcm"}
     ).encode()
@@ -365,7 +379,7 @@ def synth(text: str, *, url: str, token: str, voice: str, speed: float) -> bytes
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read()
     except urllib.error.HTTPError as exc:
         if exc.code == 401:
@@ -445,31 +459,109 @@ class Player:
             )
         except OSError as exc:
             raise Failure("sink", f"cannot start pw-cat ({exc.strerror})")
+        self.pipe = 65536
+        try:
+            self.pipe = fcntl.fcntl(self.proc.stdin.fileno(), fcntl.F_SETPIPE_SZ, PIPE_BYTES)
+            os.set_blocking(self.proc.stdin.fileno(), False)
+        except (OSError, AttributeError):
+            pass    # a blocking pipe still works; only the stall watchdog is lost
         self.first = True
+        self.written = 0
+        self.heard = False  # pw-cat has read from the pipe at least once
         self.silence = b"\x00\x00" * int(rate * max(0, preroll_ms) / 1000) if cold else b""
         self.register()
 
-    def write(self, pcm: bytes):
+    def _stalled(self, since: float | None, now: float) -> float | None:
+        """The start of the current idle spell, or None while the player is paused.
+
+        A stopped player (`say --pause`, state "T") takes no audio on purpose;
+        the spell restarts when it is resumed, so a pause of any length is not
+        a stall.
+        """
+        if _state(self.proc.pid) == "T":
+            return None
+        return now if since is None else since
+
+    def _limit(self) -> float:
+        """STALL_S once pw-cat has shown it reads; longer while the sink may be waking.
+
+        pw-cat reads only once its stream runs, and a Bluetooth sink can take
+        seconds to bring its link up. Bytes written minus bytes still in the
+        pipe is what the player has taken.
+        """
+        if not self.heard:
+            try:
+                buf = fcntl.ioctl(self.proc.stdin.fileno(), termios.FIONREAD, b"\0" * 4)
+                self.heard = self.written > struct.unpack("i", buf)[0]
+            except (OSError, ValueError):
+                self.heard = self.written > self.pipe
+        return STALL_S if self.heard else STALL_COLD_S
+
+    def write(self, pcm: bytes, abort=None) -> bool:
+        """Feed the player; False if `abort()` ended the wait first.
+
+        WHY. A blocking write into a pipe nobody reads never returns, and that
+        is how a removed sink looks from here: `pw-cat` stays alive and stops
+        reading. The pipe is small and non-blocking, so progress is visible: no
+        byte accepted for STALL_S while the player is running means the sink is
+        gone, and the player is killed.
+        """
+        data = memoryview(self.silence + pcm if self.first else pcm)
+        self.first = False
+        fd = self.proc.stdin.fileno()
+        idle = None
+        while data:
+            if abort is not None and abort():
+                return False
+            try:
+                _, ready, _ = select.select([], [fd], [], 0.1)
+                if ready:
+                    n = os.write(fd, data[:PIPE_BYTES])
+                    data = data[n:]
+                    self.written += n
+                    idle = None
+                    continue
+            except BlockingIOError:
+                pass
+            except BrokenPipeError:
+                # Not a stop: `say --stop` kills this process before its player.
+                code = self.proc.wait()
+                unregister()
+                raise Failure("sink", f"playback failed: pw-cat exited with {code}; "
+                                      "is a sink available?")
+            now = time.monotonic()
+            idle = self._stalled(idle, now)
+            if idle is not None and now - idle >= self._limit():
+                self.kill()
+                raise Failure("sink", "playback stalled; is a sink available?")
+        return True
+
+    def kill(self):
+        """End the player now and leave no registry entry."""
         try:
-            if self.first:
-                self.first = False
-                if self.silence:
-                    self.proc.stdin.write(self.silence)
-            self.proc.stdin.write(pcm)
-            self.proc.stdin.flush()
-        except BrokenPipeError:
-            # Not a stop: `say --stop` kills this process before its player.
-            code = self.proc.wait()
-            unregister()
-            raise Failure("sink", f"playback failed: pw-cat exited with {code}; "
-                                  "is a sink available?")
+            self.proc.kill()
+        except OSError:
+            pass
+        self.proc.wait()
+        unregister()
 
     def close(self):
+        self._limit()       # the pipe can be asked only while it is open
         try:
             self.proc.stdin.close()
-        except BrokenPipeError:
+        except OSError:
             pass
-        code = self.proc.wait()
+        idle = None
+        while True:     # the tail drains in well under STALL_S unless the sink is gone
+            try:
+                code = self.proc.wait(timeout=0.1)
+                break
+            except subprocess.TimeoutExpired:
+                now = time.monotonic()
+                idle = self._stalled(idle, now)
+                if idle is not None and now - idle >= self._limit():
+                    self.kill()
+                    raise Failure("sink", "playback stalled; is a sink available?")
         unregister()
         if code != 0:
             raise Failure("sink", f"playback failed: pw-cat exited with {code}; "
@@ -838,16 +930,25 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
 
     sentences = split_sentences(text)
 
-    chunks: queue.Queue = queue.Queue()
+    chunks: queue.Queue = queue.Queue(maxsize=AHEAD)
     done = threading.Event()
+    stop = threading.Event()
     failure: list[BaseException] = []
 
     def producer():
         try:
             for i, sentence in enumerate(sentences):
+                if stop.is_set():
+                    return
                 t0 = time.perf_counter()
                 pcm = synth(sentence, url=url, token=token, voice=voice, speed=speed)
-                chunks.put((i, sentence, pcm, time.perf_counter() - t0))
+                item = (i, sentence, pcm, time.perf_counter() - t0)
+                while not stop.is_set():    # the consumer may be gone: never wait forever
+                    try:
+                        chunks.put(item, timeout=0.1)
+                        break
+                    except queue.Full:
+                        pass
         except BaseException as exc:  # noqa: BLE001 - surfaced in the consumer
             failure.append(exc)
         finally:
@@ -870,36 +971,49 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
     first_audio_at = None
     t_start = time.perf_counter()
 
-    while True:
-        try:
-            i, sentence, pcm, took = chunks.get(timeout=0.1)
-        except queue.Empty:
-            if done.is_set():
+    # A fault ends the run now. A dead service means the sentences still queued
+    # are not worth playing out: the player is killed, then the cause is raised.
+    try:
+        while True:
+            if failure:
                 break
-            continue
-        if args.verbose:
-            print(f"[{i + 1}/{len(sentences)}] {took * 1000:.0f} ms · {len(pcm) // 48} ms "
-                  f"audio · {sentence[:60]!r}", file=sys.stderr)
-        if first_audio_at is None:
-            first_audio_at = time.perf_counter() - t_start
-        if args.out:
-            collected.append(pcm)
-        elif playing:
-            if player is None:
-                if wake is None:        # an auto run: its turn first, then the sink
-                    TURN.wait()
-                    wake = SinkWake()
-                    wake.start()
-                cold = wake.cold if wake.join_ready() else True
-                if args.verbose and cold:
-                    print(f"sink was asleep: {preroll} ms of lead-in silence", file=sys.stderr)
-                player = Player(rate=24000, preroll_ms=preroll, cold=cold)
-            player.write(pcm)
+            try:
+                i, sentence, pcm, took = chunks.get(timeout=0.1)
+            except queue.Empty:
+                if done.is_set():
+                    break
+                continue
+            if args.verbose:
+                print(f"[{i + 1}/{len(sentences)}] {took * 1000:.0f} ms · {len(pcm) // 48} ms "
+                      f"audio · {sentence[:60]!r}", file=sys.stderr)
+            if first_audio_at is None:
+                first_audio_at = time.perf_counter() - t_start
+            if args.out:
+                collected.append(pcm)
+            elif playing:
+                if player is None:
+                    if wake is None:        # an auto run: its turn first, then the sink
+                        TURN.wait()
+                        wake = SinkWake()
+                        wake.start()
+                    cold = wake.cold if wake.join_ready() else True
+                    if args.verbose and cold:
+                        print(f"sink was asleep: {preroll} ms of lead-in silence", file=sys.stderr)
+                    player = Player(rate=24000, preroll_ms=preroll, cold=cold)
+                player.write(pcm, abort=lambda: bool(failure))
 
-    if player is not None:
-        player.close()
-    if failure:
-        raise failure[0]
+        if failure:
+            if player is not None:
+                player.kill()
+            raise failure[0]
+        if player is not None:
+            player.close()
+    except BaseException:
+        if player is not None and player.proc.poll() is None:
+            player.kill()
+        raise
+    finally:
+        stop.set()
 
     if args.out:
         write_wav(args.out, b"".join(collected))
