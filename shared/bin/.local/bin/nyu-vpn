@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Launch the NYU AnyConnect client, clearing stale resolver state first.
+# Connect to the NYU VPN, clearing stale resolver state first.
+#
+# Default: openconnect + openconnect-sso (embedded Qt login window). Since
+# 2026-10-27 the Cisco client's external-browser SSO hangs after login, and its
+# embedded login needs webkit2gtk-4.0, which Arch no longer ships.
+# `nyu-vpn --cisco` still launches the Cisco client.
 #
 # AnyConnect writes NYU's nameservers into systemd-resolved's global (ifindex 0)
 # scope and does not revert them when a tunnel dies uncleanly. With the tunnel
@@ -13,7 +18,7 @@ set -euo pipefail
 # global DNS, so a non-empty Global scope alone is the normal state.
 global_dns() { resolvectl dns | sed -n '/^Global:/,/^[^ ]/p' | grep -o '128\.122\.[0-9.]*' | tr '\n' ' '; }
 
-if ip link show cscotun0 &>/dev/null; then
+if ip link show cscotun0 &>/dev/null || ip link show tun0 &>/dev/null; then
     echo "nyu-vpn: tunnel is already up"
     exit 0
 fi
@@ -28,4 +33,12 @@ if ! getent hosts vpn.nyu.edu >/dev/null; then
     exit 1
 fi
 
-exec /opt/cisco/anyconnect/bin/vpnui "$@"
+if [[ ${1:-} == --cisco ]]; then
+    shift
+    exec /opt/cisco/anyconnect/bin/vpnui "$@"
+fi
+
+for cmd in openconnect openconnect-sso; do
+    command -v "$cmd" >/dev/null || { echo "nyu-vpn: $cmd not installed" >&2; exit 1; }
+done
+exec openconnect-sso --server vpn.nyu.edu --user rg5022@nyu.edu "$@"
