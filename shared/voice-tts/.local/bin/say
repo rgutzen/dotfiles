@@ -26,6 +26,7 @@ first class that fails: service, token, sink, tools, watcher, config.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import queue
@@ -53,6 +54,7 @@ MAX_SENTENCE = 220  # characters; longer units are split at clause boundaries
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice-tts"
 PREROLL_MS = 300  # silence in front of a cold first sentence; see wake_sink()
 NOTIFY_EVERY_S = 30  # one notification per cause per this many seconds
+HOLD_S = float(os.environ.get("VOICE_TTS_HOLD_S") or 30)  # an auto run held longer is dropped
 NOTIFY_MAX = 300  # characters of a notification body
 
 ABBREVIATIONS = {
@@ -475,19 +477,164 @@ class Player:
 
     # -- registry, so `say --stop` and the selection bind can interrupt it
     def register(self):
+        TURN.update(player=self.proc.pid)
+
+
+# ------------------------------------------------------------------ the arbiter
+
+
+class Dropped(Exception):
+    """An `auto` run held past HOLD_S by dictation. Not a failure: no notification."""
+
+
+class Turn:
+    """This run's registry entry, and the rule that decides when it may speak.
+
+    WHY. One speaker at a time, in two lanes (decision 9 of dev/voice-out). A
+    `user` run is a key press or a typed command: someone wants to hear this
+    now, so it ends whatever is speaking and clears the `auto` queue. An `auto`
+    run is a chat reply: it waits behind every earlier run, yields to the user,
+    and holds while dictation records, because the microphone would hear it. A
+    reply held longer than HOLD_S is dropped: spoken that late it answers a
+    question nobody is still asking.
+
+    The registry is one `<pid>.json` per run in RUNTIME_DIR, written from the
+    start of the run, not from the first audio, so a waiting run can be seen and
+    stopped. `arbiter.lock` serialises the decisions; an flock dies with its
+    holder, so a killed run never leaves the lock taken. A stale entry is reaped
+    by the executable-name guard (`_is_speech`), never by its age.
+    """
+
+    def __init__(self):
+        self.entry: dict = {}
+
+    @property
+    def path(self) -> Path:
+        return RUNTIME_DIR / f"{os.getpid()}.json"
+
+    def update(self, **fields):
+        if not self.entry:          # --out and --no-play never claim a turn
+            return
+        self.entry.update(fields)
+        _write_entry(self.path, self.entry)
+
+    def claim(self, lane: str):
+        """Enter the registry: pre-empt (user) or join the queue (auto)."""
+        with _arbiter_lock():
+            if lane == "user":
+                stop_all(locked=True)
+                state = "playing"
+            else:
+                state = "waiting"
+            self.entry = {"say": os.getpid(), "player": 0, "lane": lane,
+                          "state": state, "seq": time.time_ns()}
+            _write_entry(self.path, self.entry)
+
+    def wait(self, *, poll: float = 0.1):
+        """Block an auto run until it is its turn; raise Dropped past the hold limit."""
+        if self.entry.get("state") == "playing":
+            return
+        held_since = None
+        while True:
+            with _arbiter_lock():
+                ahead = [e for e in live_entries() if e.get("say") != os.getpid()
+                         and (e.get("state", "playing") == "playing"
+                              or (e.get("lane") == "auto"
+                                  and e.get("seq", 0) < self.entry["seq"]))]
+                if not ahead:
+                    if not dictating():
+                        self.update(state="playing")
+                        return
+                    held_since = held_since or time.monotonic()
+                else:
+                    held_since = None
+            if held_since is not None and time.monotonic() - held_since >= HOLD_S:
+                self.release()
+                raise Dropped(f"dropped: dictation held this reply for {HOLD_S:g} s")
+            time.sleep(poll)
+
+    def release(self):
+        self.entry = {}
         try:
-            RUNTIME_DIR.mkdir(exist_ok=True)
-            me = RUNTIME_DIR / f"{os.getpid()}.json"
-            me.write_text(json.dumps({"say": os.getpid(), "player": self.proc.pid}))
+            self.path.unlink()
         except OSError:
             pass
 
 
+TURN = Turn()
+
+
 def unregister():
+    TURN.release()
+
+
+def _write_entry(path: Path, entry: dict):
     try:
-        (RUNTIME_DIR / f"{os.getpid()}.json").unlink()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.tmp")      # not *.json until complete
+        tmp.write_text(json.dumps(entry))
+        tmp.replace(path)
     except OSError:
         pass
+
+
+class _arbiter_lock:
+    def __enter__(self):
+        try:
+            RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+            self.fh = open(RUNTIME_DIR / "arbiter.lock", "a")
+            fcntl.flock(self.fh, fcntl.LOCK_EX)
+        except OSError:
+            self.fh = None          # no lock is a race, not a reason to stay silent
+        return self
+
+    def __exit__(self, *exc):
+        if self.fh is not None:
+            self.fh.close()
+
+
+def dictating() -> bool:
+    """True while voxtype records. A missing voxtype is never recording."""
+    try:
+        out = subprocess.run(["voxtype", "status"], capture_output=True, text=True,
+                             timeout=2).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.strip().lower().startswith("recording")
+
+
+def _pids(entry: dict) -> list[int]:
+    pids = []
+    for key in ("say", "player"):
+        try:
+            pid = int(entry.get(key) or 0)
+        except (TypeError, ValueError):
+            pid = 0
+        if pid:
+            pids.append(pid)
+    return pids
+
+
+def live_entries() -> list[dict]:
+    """Every registry entry whose `say` is still speech; the rest are reaped."""
+    out = []
+    try:
+        files = list(RUNTIME_DIR.glob("*.json"))
+    except OSError:
+        return out
+    for f in files:
+        try:
+            entry = json.loads(f.read_text())
+            if not isinstance(entry, dict):
+                raise ValueError
+        except (OSError, ValueError):
+            f.unlink(missing_ok=True)
+            continue
+        if not any(_is_speech(pid) for pid in _pids(entry)):
+            f.unlink(missing_ok=True)
+            continue
+        out.append(entry)
+    return out
 
 
 def _state(pid: int) -> str:
@@ -499,20 +646,11 @@ def _state(pid: int) -> str:
 
 
 def signal_players(sig: int, *, only_state: str | None = None) -> int:
-    """Send `sig` to every live player in the registry. Returns how many."""
+    """Send `sig` to every live player in the registry, in either lane."""
     acted = 0
-    try:
-        entries = list(RUNTIME_DIR.glob("*.json"))
-    except OSError:
-        return 0
-    for entry in entries:
-        try:
-            pid = int(json.loads(entry.read_text()).get("player") or 0)
-        except (OSError, ValueError, TypeError):
-            entry.unlink(missing_ok=True)
-            continue
+    for entry in live_entries():
+        pid = int(entry.get("player") or 0)
         if not pid or not _is_speech(pid):
-            entry.unlink(missing_ok=True)
             continue
         if only_state is not None and _state(pid) != only_state:
             continue
@@ -533,27 +671,22 @@ def pause_or_resume() -> int:
     return 1
 
 
-def stop_all() -> int:
-    """Kill every live run. Returns how many were stopped."""
-    stopped = 0
-    try:
-        entries = list(RUNTIME_DIR.glob("*.json"))
-    except OSError:
-        return 0
-    for entry in entries:
-        try:
-            pids = [int(v) for v in json.loads(entry.read_text()).values() if v]
-        except (OSError, ValueError, TypeError):
-            entry.unlink(missing_ok=True)
+def stop_all(*, locked: bool = False) -> int:
+    """End every run in both lanes, waiting ones too. Returns how many were speaking.
+
+    A run that only waited is removed but not counted, so the selection key's
+    "stop if speaking, else speak" still speaks when the queue held a reply.
+    """
+    if not locked:
+        with _arbiter_lock():
+            return stop_all(locked=True)
+    speaking = 0
+    for entry in live_entries():
+        pids = [p for p in _pids(entry) if p != os.getpid()]
+        if not pids:
             continue
-        alive = False
-        for pid in pids:
-            if _is_speech(pid):
-                alive = True
-        if not alive:
-            entry.unlink(missing_ok=True)
-            continue
-        stopped += 1
+        if entry.get("state", "playing") == "playing":
+            speaking += 1
         for pid in pids:  # a stopped process holds SIGTERM until it is resumed
             if _is_speech(pid) and _state(pid) == "T":
                 try:
@@ -571,8 +704,8 @@ def stop_all() -> int:
             time.sleep(0.15)
             if not any(_alive(pid) for pid in pids):
                 break
-        entry.unlink(missing_ok=True)
-    return stopped
+        (RUNTIME_DIR / f"{entry.get('say')}.json").unlink(missing_ok=True)
+    return speaking
 
 
 def _alive(pid: int) -> bool:
@@ -621,6 +754,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--resume", action="store_true", help="continue a paused run")
     ap.add_argument("--toggle-pause", action="store_true",
                     help="pause if speaking, resume if paused (status 1 if neither)")
+    ap.add_argument("--lane", choices=("user", "auto"), default="user",
+                    help="user (default) pre-empts any speech; auto waits its turn, "
+                         "yields to user runs and holds while dictation records")
     ap.add_argument("--notify", action="store_true",
                     help="also report a failure as a desktop notification (for key binds)")
     ap.add_argument("--doctor", action="store_true",
@@ -661,6 +797,9 @@ def main(argv: list[str]) -> int:
 
     try:
         return speak(args, cfg=cfg, voice=voice, speed=speed, url=url, token=token)
+    except Dropped as exc:
+        print(f"say: {exc}", file=sys.stderr)
+        return 3
     except Failure as exc:
         print(f"say: {exc.message}", file=sys.stderr)
         if args.notify:
@@ -671,6 +810,8 @@ def main(argv: list[str]) -> int:
         if args.notify:
             notify("error", f"{type(exc).__name__}: {exc}")
         raise
+    finally:
+        TURN.release()
 
 
 def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
@@ -714,9 +855,12 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
 
     playing = not args.out and not args.no_play
     preroll = args.preroll if args.preroll is not None else int(cfg.get("preroll", PREROLL_MS))
-    wake = SinkWake() if playing else None
-    if wake:
-        wake.start()
+    wake = None
+    if playing:
+        TURN.claim(args.lane)
+        if TURN.entry["state"] == "playing":    # the user lane: wake the sink now
+            wake = SinkWake()
+            wake.start()
     cold = False
     player = None
 
@@ -742,6 +886,10 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
             collected.append(pcm)
         elif playing:
             if player is None:
+                if wake is None:        # an auto run: its turn first, then the sink
+                    TURN.wait()
+                    wake = SinkWake()
+                    wake.start()
                 cold = wake.cold if wake.join_ready() else True
                 if args.verbose and cold:
                     print(f"sink was asleep: {preroll} ms of lead-in silence", file=sys.stderr)
