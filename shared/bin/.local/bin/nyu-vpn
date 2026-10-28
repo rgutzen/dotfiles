@@ -9,7 +9,9 @@
 # clears it -- restarting NetworkManager does not.
 set -euo pipefail
 
-global_dns() { resolvectl dns | sed -n 's/^Global: *//p'; }
+# Only NYU's servers (128.122.x) count as stale: resolved.conf sets its own
+# global DNS, so a non-empty Global scope alone is the normal state.
+global_dns() { resolvectl dns | sed -n '/^Global:/,/^[^ ]/p' | grep -o '128\.122\.[0-9.]*' | tr '\n' ' '; }
 
 if ip link show cscotun0 &>/dev/null; then
     echo "nyu-vpn: tunnel is already up"
