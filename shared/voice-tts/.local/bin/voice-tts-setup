@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# voice-tts-setup -- build everything voice-tts.service needs on a fresh machine.
+#
+#   voice-tts-setup            # venv, model files, token, enable the unit
+#   voice-tts-setup --dry-run  # print each step, change nothing
+#
+# WHY a script and not bootstrap.sh: the models are 338 MB and the venv pulls
+# onnxruntime, so bootstrap.sh calls this only with --voice. Idempotent: a venv
+# that imports kokoro_onnx, a model whose sha256 matches and an existing token
+# are kept. A model is downloaded to <name>.part and renamed only after its
+# checksum matches, so a failed download never leaves a file under the final
+# name for the service to load.
+#
+# Test overrides: VOICE_TTS_HOME (data dir), VOICE_TTS_ENV (token file),
+# VOICE_TTS_MODEL_URL (release base URL), VOICE_TTS_SHA_ONNX, VOICE_TTS_SHA_VOICES.
+
+set -euo pipefail
+
+DRY=0
+case "${1:-}" in
+    "")        ;;
+    --dry-run) DRY=1 ;;
+    *)         echo "usage: voice-tts-setup [--dry-run]" >&2; exit 2 ;;
+esac
+
+HOME_DIR="${VOICE_TTS_HOME:-$HOME/.local/share/voice-tts}"
+TOKEN_FILE="${VOICE_TTS_ENV:-$HOME/.config/pazras/voice-tts.env}"
+BASE_URL="${VOICE_TTS_MODEL_URL:-https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0}"
+SHA_ONNX="${VOICE_TTS_SHA_ONNX:-7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5}"
+SHA_VOICES="${VOICE_TTS_SHA_VOICES:-bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d}"
+PACKAGE="kokoro-onnx==0.6.1"
+VENV="$HOME_DIR/venv"
+MODELS="$HOME_DIR/models"
+UNIT=voice-tts.service
+
+ok()   { echo "  ✓ $*"; }
+plan() { echo "  · would $*"; }
+warn() { echo "  ! $*"; }
+fail() { echo "  ✗ $*" >&2; exit 1; }
+
+sha_of() { sha256sum "$1" | cut -d' ' -f1; }
+
+echo "── voice-tts ──"
+
+# ── venv ─────────────────────────────────────────────────────────────────
+if [[ -x "$VENV/bin/python" ]] && "$VENV/bin/python" -c 'import kokoro_onnx' >/dev/null 2>&1; then
+    ok "keep $VENV (kokoro_onnx imports)"
+elif (( DRY )); then
+    plan "create venv $VENV and install $PACKAGE"
+else
+    mkdir -p "$HOME_DIR"
+    if command -v uv >/dev/null; then
+        uv venv --clear --python 3.12 "$VENV" >/dev/null
+        uv pip install --python "$VENV/bin/python" "$PACKAGE" >/dev/null
+    else
+        python3 -m venv --clear "$VENV"
+        "$VENV/bin/pip" install --quiet "$PACKAGE"
+    fi
+    "$VENV/bin/python" -c 'import kokoro_onnx' >/dev/null 2>&1 \
+        || fail "venv built but kokoro_onnx does not import"
+    ok "created venv $VENV"
+fi
+
+# ── model files ──────────────────────────────────────────────────────────
+fetch_model() {                       # name sha256 size-label
+    local name="$1" sha="$2" size="$3" dest="$MODELS/$1"
+    if [[ -f "$dest" && "$(sha_of "$dest")" == "$sha" ]]; then
+        ok "keep $dest (checksum ok)"
+        return
+    fi
+    if (( DRY )); then
+        plan "download $name ($size) to $dest"
+        return
+    fi
+    mkdir -p "$MODELS"
+    rm -f "$dest.part"
+    curl -fL --silent --show-error -o "$dest.part" "$BASE_URL/$name" \
+        || { rm -f "$dest.part"; fail "download of $name failed"; }
+    if [[ "$(sha_of "$dest.part")" != "$sha" ]]; then
+        rm -f "$dest.part"
+        fail "$name: checksum mismatch, not installed"
+    fi
+    mv -f "$dest.part" "$dest"
+    ok "downloaded $dest"
+}
+fetch_model kokoro-v1.0.onnx "$SHA_ONNX"   "310 MB"
+fetch_model voices-v1.0.bin  "$SHA_VOICES" "27 MB"
+
+# ── token ────────────────────────────────────────────────────────────────
+if [[ -e "$TOKEN_FILE" ]]; then
+    ok "keep $TOKEN_FILE (exists)"
+elif (( DRY )); then
+    plan "write token $TOKEN_FILE (mode 600)"
+else
+    mkdir -p "$(dirname "$TOKEN_FILE")"
+    ( umask 077; printf 'VOICE_TTS_TOKEN=%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(32))')" > "$TOKEN_FILE" )
+    chmod 600 "$TOKEN_FILE"
+    ok "wrote $TOKEN_FILE (mode 600)"
+fi
+
+# ── unit ─────────────────────────────────────────────────────────────────
+if (( DRY )); then
+    plan "enable $UNIT"
+elif command -v systemctl >/dev/null; then
+    systemctl --user daemon-reload
+    systemctl --user enable --now "$UNIT" >/dev/null 2>&1 \
+        && ok "$UNIT enabled" \
+        || fail "could not enable $UNIT"
+else
+    warn "systemctl missing — enable $UNIT yourself"
+fi

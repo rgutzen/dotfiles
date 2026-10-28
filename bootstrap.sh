@@ -6,12 +6,24 @@
 #   ./bootstrap.sh --dry-run  # show what would be linked, change nothing
 #   ./bootstrap.sh --adopt    # first run on a machine that already has configs
 #   ./bootstrap.sh --delete   # unstow everything
+#   ./bootstrap.sh --voice    # also build the voice-tts venv, download its
+#                             # 338 MB of model weights, enable the service
+#                             # (combines with install: ./bootstrap.sh --adopt --voice)
 
 set -euo pipefail
 DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DOTFILES"
 
-MODE="${1:-install}"
+# --voice is a switch beside the mode, not a mode: it runs voice-tts-setup, which
+# downloads 338 MB, so a plain re-run never does.
+MODE=install
+VOICE=0
+for arg in "$@"; do
+    case "$arg" in
+        --voice) VOICE=1 ;;
+        *)       MODE="$arg" ;;
+    esac
+done
 
 # --no-folding on every package, deliberately.
 #
@@ -64,7 +76,7 @@ case "$MODE" in
         STOW_ARGS+=(--adopt)
         ;;
     *)
-        echo "usage: ./bootstrap.sh [--dry-run|--adopt|--delete]"
+        echo "usage: ./bootstrap.sh [--dry-run|--adopt|--delete] [--voice]"
         exit 1
         ;;
 esac
@@ -215,6 +227,23 @@ else
     echo "  ✓ voxtype config.toml is voxtype's own"
 fi
 
+# voice-tts needs a venv and 338 MB of model weights, so it is built only on
+# request. The stow step above has already linked the script into ~/.local/bin.
+# A dry run passes its flag on, and --delete never builds anything.
+if [[ "$VOICE" == 1 && "$MODE" == --dry-run ]]; then
+    "$DOTFILES/shared/voice-tts/.local/bin/voice-tts-setup" --dry-run
+elif [[ "$VOICE" == 1 && "$MODE" != --delete ]]; then
+    "$DOTFILES/shared/voice-tts/.local/bin/voice-tts-setup" \
+        || echo "  ! voice-tts-setup failed"
+elif [[ "$MODE" != --delete ]]; then
+    if [[ -x "$HOME/.local/share/voice-tts/venv/bin/python" \
+          && -f "$HOME/.local/share/voice-tts/models/kokoro-v1.0.onnx" ]]; then
+        echo "  ✓ voice-tts venv and models present (--voice re-checks them)"
+    else
+        echo "  ! voice-tts service not set up — run ./bootstrap.sh --voice (or voice-tts-setup)"
+    fi
+fi
+
 # ── agent integrations ───────────────────────────────────────────────────
 # Herdr owns these files (it writes them into each harness's own config dir),
 # so they are not stowed. Re-installing is idempotent and also upgrades an
@@ -266,8 +295,9 @@ if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; the
     # one instead of whichever it happens to prefer. Its only prerequisite is
     # wl-clipboard and a Wayland session; without the session `enable` still
     # works and the unit starts at the next login. voice-tts.service is NOT
-    # enabled here: it needs a venv and 338 MB of model weights this script
-    # does not create (see memory/knowledge/system/harness/voice-local.md).
+    # enabled here: it needs a venv and 338 MB of model weights, which
+    # `./bootstrap.sh --voice` (voice-tts-setup) creates and then enables the
+    # unit itself (see memory/knowledge/system/harness/voice-local.md).
     if command -v wl-paste >/dev/null && [[ "$SESSION" == "wayland" ]]; then
         systemctl --user enable voice-selection-watch.service >/dev/null 2>&1 \
             && echo "  ✓ voice-selection-watch.service"
