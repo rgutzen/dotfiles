@@ -16,7 +16,11 @@ and markdown syntax. Pronunciation of paths and symbols is not attempted.
 
 A failure prints its cause to stderr. A key binding has no terminal, so the bind
 scripts pass `--notify`: each failure also becomes one desktop notification,
-at most one per cause every 30 s, and a success stays quiet.
+at most one per cause every 30 s, and a success stays quiet. The notification
+ends with the doctor's line for that cause, so it says what to look at.
+
+`say --doctor` checks the chain once, in order, one line each, and stops at the
+first class that fails: service, token, sink, tools, watcher, config.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ import json
 import os
 import queue
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -40,11 +45,15 @@ DEFAULT_VOICE = "af_heart"
 CONF_FILE = os.path.expanduser(
     os.environ.get("VOICE_TTS_CONF", "~/.config/voice-tts/config")
 )
-ENV_FILE = os.path.expanduser("~/.config/pazras/voice-tts.env")
+ENV_FILE = os.path.expanduser(
+    os.environ.get("VOICE_TTS_ENV", "~/.config/pazras/voice-tts.env")
+)
+KNOWN_KEYS = {"url", "voice", "speed", "preroll"}
 MAX_SENTENCE = 220  # characters; longer units are split at clause boundaries
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice-tts"
 PREROLL_MS = 300  # silence in front of a cold first sentence; see wake_sink()
 NOTIFY_EVERY_S = 30  # one notification per cause per this many seconds
+NOTIFY_MAX = 300  # characters of a notification body
 
 ABBREVIATIONS = {
     "e.g", "i.e", "vs", "etc", "cf", "al", "approx", "fig", "no", "dr", "mr",
@@ -66,12 +75,14 @@ class Failure(Exception):
 
 
 def notify(cause: str, message: str, *, now: float | None = None,
-           state: Path | None = None) -> bool:
+           state: Path | None = None, extra=None) -> bool:
     """One desktop notification for a failure, unless this cause had one recently.
 
     The state file holds the time of the last notification per cause, so a key
     pressed five times at a dead service says so once. `now` and `state` are
-    there for the tests: nothing has to sleep to cross the window.
+    there for the tests: nothing has to sleep to cross the window. `extra` is a
+    callable returning a line to append (the doctor's); it runs only when a
+    notification is actually sent.
     """
     now = time.time() if now is None else now
     state = state or RUNTIME_DIR / "notified.state"   # not *.json: that is the registry
@@ -93,6 +104,14 @@ def notify(cause: str, message: str, *, now: float | None = None,
     except OSError:
         pass
     line = (message.splitlines() or [cause])[0][:200]
+    tail = ""
+    if extra is not None:
+        try:
+            tail = (extra() or "").strip()
+        except Exception:  # noqa: BLE001 - the hint must never cost the notification
+            tail = ""
+    if tail:
+        line = f"{line} \u2014 {tail}"[:NOTIFY_MAX]
     try:
         subprocess.run(["notify-send", "--app-name=say", "Speech failed", line],
                        capture_output=True, timeout=5)
@@ -192,6 +211,143 @@ def read_token(explicit: str | None) -> str:
     except OSError:
         pass
     return ""
+
+
+# ---------------------------------------------------------------------- doctor
+
+
+def _unit_state(unit: str) -> str:
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", unit],
+                           capture_output=True, text=True, timeout=5)
+        return r.stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown (no systemctl)"
+
+
+def check_service(url: str, token: str) -> tuple[bool, str]:
+    state = _unit_state("voice-tts")
+    if state != "active":
+        return False, f"unit voice-tts is {state}; systemctl --user start voice-tts"
+    req = urllib.request.Request(
+        f"{url.rstrip('/')}/health",
+        headers={"Authorization": f"Bearer {token}"} if token else {},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            body = json.loads(resp.read() or b"{}")
+    except urllib.error.HTTPError as exc:
+        return False, f"{url}/health answered {exc.code}"
+    except (OSError, ValueError) as exc:
+        return False, f"{url}/health gave no answer ({getattr(exc, 'reason', exc)})"
+    if not body.get("ok"):
+        return False, f"{url}/health answered but not ok"
+    return True, f"unit active, {url}/health ok"
+
+
+def check_token() -> tuple[bool, str]:
+    via_env = bool(os.environ.get("VOICE_TTS_TOKEN"))
+    try:
+        mode = os.stat(ENV_FILE).st_mode & 0o777
+    except OSError:
+        if via_env:
+            return True, f"{ENV_FILE} missing; token from VOICE_TTS_TOKEN"
+        return False, f"{ENV_FILE} missing"
+    if mode & 0o077:
+        return False, f"{ENV_FILE} has mode {mode:o}; chmod 600 it"
+    try:
+        has_line = any(line.startswith("VOICE_TTS_TOKEN=") and line.split("=", 1)[1].strip()
+                       for line in open(ENV_FILE))
+    except OSError as exc:
+        return False, f"cannot read {ENV_FILE} ({exc.strerror})"
+    if not has_line:
+        if via_env:
+            return True, f"{ENV_FILE} has no token line; token from VOICE_TTS_TOKEN"
+        return False, f"{ENV_FILE} has no VOICE_TTS_TOKEN= line"
+    return True, f"{ENV_FILE} mode {mode:o}"
+
+
+def check_sink() -> tuple[bool, str]:
+    try:
+        name = subprocess.run(["pactl", "get-default-sink"], capture_output=True,
+                              text=True, timeout=5).stdout.strip()
+        out = subprocess.run(["pactl", "-f", "json", "list", "sinks"],
+                             capture_output=True, text=True, timeout=5).stdout
+        sinks = json.loads(out)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        return False, f"cannot query sinks with pactl ({exc})"
+    if not name:
+        return False, "no default sink; is PipeWire running?"
+    for sink in sinks:
+        if sink.get("name") == name:
+            return True, f"{name} ({str(sink.get('state', '?')).upper()})"
+    return False, f"default sink {name} is not among the sinks"
+
+
+def check_tools() -> tuple[bool, str]:
+    tools = ("pw-cat", "wl-paste", "notify-send")
+    missing = [t for t in tools if not shutil.which(t)]
+    if missing:
+        return False, f"not on PATH: {', '.join(missing)}"
+    return True, ", ".join(tools)
+
+
+def check_watcher() -> tuple[bool, str]:
+    state = _unit_state("voice-selection-watch")
+    if state != "active":
+        return False, f"unit voice-selection-watch is {state}"
+    if not (RUNTIME_DIR.is_dir() and os.access(RUNTIME_DIR, os.W_OK | os.X_OK)):
+        return False, f"stamp directory {RUNTIME_DIR} is missing or not writable"
+    return True, f"unit active, {RUNTIME_DIR} writable"
+
+
+def check_config() -> tuple[bool, str]:
+    if not os.path.exists(CONF_FILE):
+        return True, f"{CONF_FILE} not found; defaults apply"
+    try:
+        keys = read_config().keys()
+        open(CONF_FILE).close()
+    except OSError as exc:
+        return True, f"{CONF_FILE} unreadable ({exc.strerror}); defaults apply"
+    unknown = sorted(set(keys) - KNOWN_KEYS)
+    if unknown:
+        return False, f"unknown key in {CONF_FILE}: {', '.join(unknown)}"
+    return True, f"{CONF_FILE}, keys known"
+
+
+def doctor_line(cause: str, url: str, token: str) -> str:
+    """The one doctor line for a failure's cause, or "" if no check matches."""
+    if cause in ("unreachable", "service"):
+        ok, detail = check_service(url, token)
+        name = "service"
+    elif cause == "token":
+        ok, detail = check_token()
+        name = "token"
+    elif cause == "sink":
+        ok, detail = check_sink()
+        name = "sink"
+    else:
+        return ""
+    return f"{'ok  ' if ok else 'FAIL'} {name}: {detail}"
+
+
+def doctor(url: str, token: str) -> int:
+    """Run the check classes in order; stop at the first class that fails.
+
+    WHY. A dead key press says only that something is wrong. The chain has six
+    links and the earlier ones explain the later ones (no unit, so no health;
+    no token, so a 401), so the first failure is the one worth fixing. Nothing
+    here speaks, wakes the sink, writes the registry or notifies.
+    """
+    checks = (("service", lambda: check_service(url, token)), ("token", check_token),
+              ("sink", check_sink), ("tools", check_tools),
+              ("watcher", check_watcher), ("config", check_config))
+    for name, run in checks:
+        ok, detail = run()
+        print(f"{'ok  ' if ok else 'FAIL'} {name}: {detail}")
+        if not ok:
+            return 1
+    return 0
 
 
 def synth(text: str, *, url: str, token: str, voice: str, speed: float) -> bytes:
@@ -467,6 +623,8 @@ def main(argv: list[str]) -> int:
                     help="pause if speaking, resume if paused (status 1 if neither)")
     ap.add_argument("--notify", action="store_true",
                     help="also report a failure as a desktop notification (for key binds)")
+    ap.add_argument("--doctor", action="store_true",
+                    help="check the service, token, sink, tools, watcher and config; exit 1 on the first failure")
     ap.add_argument("--verbose", "-v", action="store_true", help="print per-sentence timing")
     args = ap.parse_args(argv)
 
@@ -487,6 +645,9 @@ def main(argv: list[str]) -> int:
     url = args.url or os.environ.get("VOICE_TTS_URL") or cfg.get("url") or DEFAULT_URL
     token = read_token(args.token)
 
+    if args.doctor:
+        return doctor(url, token)
+
     if args.voices:
         req = urllib.request.Request(
             f"{url.rstrip('/')}/v1/audio/voices",
@@ -503,7 +664,8 @@ def main(argv: list[str]) -> int:
     except Failure as exc:
         print(f"say: {exc.message}", file=sys.stderr)
         if args.notify:
-            notify(exc.cause, exc.message)
+            notify(exc.cause, exc.message,
+                   extra=lambda: doctor_line(exc.cause, url, token))
         return 2 if exc.cause == "empty" else 1
     except Exception as exc:  # a bug, not a cause: still never silent at a key
         if args.notify:
