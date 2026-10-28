@@ -41,4 +41,6 @@ fi
 for cmd in openconnect openconnect-sso; do
     command -v "$cmd" >/dev/null || { echo "nyu-vpn: $cmd not installed" >&2; exit 1; }
 done
-exec openconnect-sso --server vpn.nyu.edu --user rg5022@nyu.edu "$@"
+# DTLS (UDP) drops inbound packets here (EMSGSIZE): TCP connects, but no data
+# returns. TLS-only carries all traffic. Further arguments go to openconnect.
+exec openconnect-sso --server vpn.nyu.edu --user rg5022@nyu.edu -- --no-dtls "$@"
