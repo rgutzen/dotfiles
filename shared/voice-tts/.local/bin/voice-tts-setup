@@ -92,8 +92,12 @@ if [[ -e "$TOKEN_FILE" ]]; then
 elif (( DRY )); then
     plan "write token $TOKEN_FILE (mode 600)"
 else
+    # An empty token would turn the service's authentication off, so a failed
+    # generator stops here instead of writing one.
+    tok="$(python3 -c 'import secrets; print(secrets.token_hex(32))')" && [[ -n "$tok" ]] \
+        || fail "could not generate a token; $TOKEN_FILE not written"
     mkdir -p "$(dirname "$TOKEN_FILE")"
-    ( umask 077; printf 'VOICE_TTS_TOKEN=%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(32))')" > "$TOKEN_FILE" )
+    ( umask 077; printf 'VOICE_TTS_TOKEN=%s\n' "$tok" > "$TOKEN_FILE" )
     chmod 600 "$TOKEN_FILE"
     ok "wrote $TOKEN_FILE (mode 600)"
 fi
@@ -102,8 +106,7 @@ fi
 if (( DRY )); then
     plan "enable $UNIT"
 elif command -v systemctl >/dev/null; then
-    systemctl --user daemon-reload
-    systemctl --user enable --now "$UNIT" >/dev/null 2>&1 \
+    { systemctl --user daemon-reload && systemctl --user enable --now "$UNIT"; } >/dev/null 2>&1 \
         && ok "$UNIT enabled" \
         || fail "could not enable $UNIT"
 else
