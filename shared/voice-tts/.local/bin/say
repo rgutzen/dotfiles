@@ -26,16 +26,27 @@ One voice at a time. A plain `say` is the user lane: it ends whatever speaks.
 `say --lane auto` (a chat reply) waits its turn, holds while dictation records,
 and is dropped with exit 3 after 30 s held or 2 min in the lane. While the mute
 file (`voice-mute`) exists an `auto` run is dropped with exit 3 at once.
+
+The usage log (C7). Each run that took a turn (not `--out`, `--no-play`,
+`--stop`, `--doctor`, nor a run with nothing speakable) appends one line to
+`$XDG_DATA_HOME/voice-tts/usage.jsonl`: time, `$VOICE_TTS_HARNESS`, lane, the
+characters sent to synthesis, seconds played, and the outcome (done, stopped,
+removed, dropped, failed). Never any text. A SIGTERM writes its line from a
+handler, then dies by SIGTERM as before. A write error is ignored: logging never
+changes what `say` does. `say --stats [DAYS]` summarises the log per harness and
+lane, and says how often a reply was stopped within 3 s of starting.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
 import fcntl
 import json
 import os
 import queue
 import re
+import statistics
 import select
 import shutil
 import signal
@@ -492,6 +503,7 @@ class Player:
             )
         except OSError as exc:
             raise Failure("sink", f"cannot start pw-cat ({exc.strerror})")
+        USAGE.started = time.monotonic()
         self.pipe = 65536
         try:
             self.pipe = fcntl.fcntl(self.proc.stdin.fileno(), fcntl.F_SETPIPE_SZ, PIPE_BYTES)
@@ -612,6 +624,131 @@ class Player:
         TURN.update(player=self.proc.pid)
 
 
+# --------------------------------------------------------------------- usage
+
+
+OUTCOMES = ("done", "stopped", "removed", "dropped", "failed")
+EARLY_STOP_S = 3.0   # a reply stopped sooner than this was probably unwelcome (C8)
+
+
+def usage_path() -> Path:
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return Path(base) / "voice-tts" / "usage.jsonl"
+
+
+class Usage:
+    """The one line this run adds to the usage log. Counts, never text.
+
+    WHY. Whether chat speech stays depends on how often a reply is cut short
+    (C8), and only the run knows how long it played. The SIGTERM handler exists
+    because a stopped run used to die without a trace: it writes the line, then
+    restores the default action and signals itself, so the exit is still
+    "killed by SIGTERM". It takes no lock and starts no process.
+    """
+
+    def __init__(self):
+        self.lane = ""
+        self.chars = 0
+        self.started: float | None = None   # monotonic time the player started
+        self.written = False
+        self.verbose = False
+
+    def begin(self, lane: str):
+        self.lane = lane
+        signal.signal(signal.SIGTERM, self._on_term)
+
+    def _on_term(self, signum, frame):
+        self.finish("stopped" if self.started is not None else "removed")
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    def finish(self, outcome: str):
+        if not self.lane or self.written:
+            return
+        self.written = True
+        spoken = round(time.monotonic() - self.started, 2) if self.started is not None else 0
+        rec = {"t": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+               "harness": os.environ.get("VOICE_TTS_HARNESS", ""), "lane": self.lane,
+               "chars": self.chars, "spoken_s": spoken, "outcome": outcome}
+        if outcome == "stopped":
+            rec["stopped_early_s"] = spoken
+        try:
+            path = usage_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            try:
+                os.write(fd, (json.dumps(rec) + "\n").encode())
+            finally:
+                os.close(fd)
+        except OSError as exc:
+            if self.verbose:
+                print(f"say: usage log not written ({exc.strerror})", file=sys.stderr)
+
+
+USAGE = Usage()
+
+
+def usage_stats(days: float = 0) -> int:
+    """Print the summary of the usage log; `days` > 0 keeps the last that many."""
+    rows: list[dict] = []
+    skipped = 0
+    cutoff = None
+    if days > 0:
+        cutoff = datetime.datetime.now().astimezone() - datetime.timedelta(days=days)
+    try:
+        lines = usage_path().read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+            when = datetime.datetime.fromisoformat(r["t"])
+            if when.tzinfo is None:
+                when = when.astimezone()
+            if (not isinstance(r["harness"], str) or r["lane"] not in ("user", "auto")
+                    or r["outcome"] not in OUTCOMES or isinstance(r["spoken_s"], bool)
+                    or not isinstance(r["spoken_s"], (int, float))):
+                raise ValueError
+            stopped = r.get("stopped_early_s", r["spoken_s"])
+            if isinstance(stopped, bool) or not isinstance(stopped, (int, float)):
+                raise ValueError
+        except (ValueError, KeyError, TypeError):
+            skipped += 1
+            continue
+        if cutoff is None or when >= cutoff:
+            rows.append({**r, "stopped_early_s": stopped})
+    note = f"{skipped} line{'s' if skipped != 1 else ''} skipped" if skipped else ""
+    if not rows:
+        print("no usage recorded")
+        if note:
+            print(note)
+        return 0
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for r in rows:
+        groups.setdefault((r["harness"] or "-", r["lane"]), []).append(r)
+    head = ("harness", "lane", "runs", *OUTCOMES, "minutes")
+    table = [head]
+    for (harness, lane), rs in sorted(groups.items()):
+        counts = [sum(1 for r in rs if r["outcome"] == o) for o in OUTCOMES]
+        minutes = sum(r["spoken_s"] for r in rs) / 60
+        table.append((harness, lane, str(len(rs)), *map(str, counts), f"{minutes:.1f}"))
+    widths = [max(len(row[i]) for row in table) for i in range(len(head))]
+    for row in table:
+        print("  ".join(c.ljust(w) if i < 2 else c.rjust(w)
+                        for i, (c, w) in enumerate(zip(row, widths))).rstrip())
+    stops = sorted(r["stopped_early_s"] for r in rows if r["outcome"] == "stopped")
+    quick = sum(1 for s in stops if s <= EARLY_STOP_S)
+    share = f" ({round(100 * quick / len(stops))}%)" if stops else ""
+    print(f"stopped within 3 s: {quick} of {len(stops)}{share}")
+    print("median seconds before a stop: "
+          + (f"{statistics.median(stops):.1f}" if stops else "-"))
+    if note:
+        print(note)
+    return 0
+
+
 # ------------------------------------------------------------------ the arbiter
 
 
@@ -658,6 +795,7 @@ class Turn:
 
     def claim(self, lane: str):
         """Enter the registry: pre-empt (user) or join the queue (auto)."""
+        USAGE.begin(lane)           # from here a SIGTERM is logged, then still fatal
         if lane == "auto":
             self._check_mute()      # before any synthesis: a muted reply costs no CPU
         with _arbiter_lock():
@@ -936,9 +1074,14 @@ def main(argv: list[str]) -> int:
                     help="also report a failure as a desktop notification (for key binds)")
     ap.add_argument("--doctor", action="store_true",
                     help="check the service, token, sink, tools, watcher and config; exit 1 on the first failure")
+    ap.add_argument("--stats", nargs="?", type=float, const=0, metavar="DAYS",
+                    help="summarise the usage log (the last DAYS days, else all) and exit")
     ap.add_argument("--verbose", "-v", action="store_true", help="print per-sentence timing")
     args = ap.parse_args(argv)
 
+    if args.stats is not None:
+        return usage_stats(args.stats)
+    USAGE.verbose = args.verbose
     if args.stop:
         return 0 if stop_all() else 1
     if args.pause:
@@ -971,17 +1114,22 @@ def main(argv: list[str]) -> int:
         return 0
 
     try:
-        return speak(args, cfg=cfg, voice=voice, speed=speed, url=url, token=token)
+        rc = speak(args, cfg=cfg, voice=voice, speed=speed, url=url, token=token)
+        USAGE.finish("done")
+        return rc
     except Dropped as exc:
+        USAGE.finish("dropped")
         print(f"say: {exc}", file=sys.stderr)
         return 3
     except Failure as exc:
+        USAGE.finish("failed")
         print(f"say: {exc.message}", file=sys.stderr)
         if args.notify:
             notify(exc.cause, exc.message,
                    extra=lambda: doctor_line(exc.cause, url, token))
         return 2 if exc.cause == "empty" else 1
     except Exception as exc:  # a bug, not a cause: still never silent at a key
+        USAGE.finish("failed")
         if args.notify:
             notify("error", f"{type(exc).__name__}: {exc}")
         raise
@@ -1011,6 +1159,7 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
     if not text:
         raise Failure("empty", "nothing to speak: the input has no speakable text")
 
+    USAGE.chars = len(text)
     sentences = split_sentences(text)
 
     chunks: queue.Queue = queue.Queue(maxsize=AHEAD)
