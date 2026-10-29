@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""voice-reply -- per-session speech switch and speaker for harnesses without an extension.
+
+WHY. The pi extension keeps its mode in the session; Claude Code and opencode
+have no such place, and their hooks are separate short-lived processes. This
+script is the shared part: one flag file per session says whether that
+session's replies are spoken, and `speak` hands a finished reply to
+`say --lane auto --notify` without waiting for the speech (decision 14: a
+failure becomes a notification, not silence).
+
+State lives in $XDG_RUNTIME_DIR/voice-tts/sessions/<harness>-<session>.on, a
+runtime directory on purpose: after a reboot every session is off, the safe
+default. The global mute ($XDG_RUNTIME_DIR/voice-tts/mute, existence only,
+written by voice-mute) wins over every flag.
+
+Usage:
+  voice-reply on|off|toggle|status --harness H --session S
+  voice-reply speak  --harness H --session S      reply text on stdin
+  voice-reply cancel --harness H --session S
+  voice-reply claude-hook                         Claude Code hook JSON on stdin
+
+CANCEL KILLS THE RUN'S PROCESS GROUP, after checking that the pid still names
+a `say` (a pid file outlives its process, and pids are reused). A SIGTERM to
+the pid alone ends `say` but would leave its pw-cat playing. Never pkill.
+
+`claude-hook` is called by voice-stop.sh only when the mode is on or the prompt
+may be a /voice command. It never raises and always returns 0: a hook that
+fails must not block a reply.
+"""
+import argparse
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+
+RUNTIME = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "voice-tts")
+SESSIONS = os.path.join(RUNTIME, "sessions")
+MUTE = os.path.join(RUNTIME, "mute")
+CONVENTION = "~/06_SYSTEM/config/practice/conventions/spoken-replies.md"
+VOICE_RE = re.compile(r"/voice(?:\s+(\S+))?\s*")
+SUBCOMMANDS = ("on", "off", "toggle", "status")
+
+
+def clean(session: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", session) or "_"
+
+
+def path(harness: str, session: str, ext: str) -> str:
+    return os.path.join(SESSIONS, f"{clean(harness)}-{clean(session)}.{ext}")
+
+
+def is_on(harness: str, session: str) -> bool:
+    return os.path.exists(path(harness, session, "on"))
+
+
+def state_text(harness: str, session: str) -> str:
+    text = "speech on" if is_on(harness, session) else "speech off"
+    return text + (" (muted)" if os.path.exists(MUTE) else "")
+
+
+def set_on(harness: str, session: str, on: bool) -> None:
+    flag = path(harness, session, "on")
+    if on:
+        os.makedirs(RUNTIME, mode=0o700, exist_ok=True)
+        os.makedirs(SESSIONS, mode=0o700, exist_ok=True)
+        with open(flag, "a"):
+            pass
+    else:
+        try:
+            os.remove(flag)
+        except FileNotFoundError:
+            pass
+
+
+def change(cmd: str, harness: str, session: str) -> str:
+    if cmd == "toggle":
+        cmd = "off" if is_on(harness, session) else "on"
+    if cmd == "on":
+        set_on(harness, session, True)
+    elif cmd == "off":
+        set_on(harness, session, False)
+        cancel(harness, session)
+    return state_text(harness, session)
+
+
+def live_pids(pidfile: str) -> list[int]:
+    """Pids in the file that are still a `say` leading its own process group."""
+    try:
+        with open(pidfile) as f:
+            pids = [int(x) for x in f.read().split()]
+    except (OSError, ValueError):
+        return []
+    live = []
+    for pid in pids:
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmdline = f.read()
+            if b"say" in cmdline and os.getpgid(pid) == pid:
+                live.append(pid)
+        except (OSError, ProcessLookupError):
+            pass
+    return live
+
+
+def cancel(harness: str, session: str) -> None:
+    pidfile = path(harness, session, "pid")
+    for pid in live_pids(pidfile):
+        for sig in (signal.SIGCONT, signal.SIGTERM):   # a paused player holds SIGTERM
+            try:
+                os.killpg(pid, sig)
+            except OSError:
+                pass
+    try:
+        os.remove(pidfile)
+    except FileNotFoundError:
+        pass
+
+
+def speak(harness: str, session: str, text: str) -> int:
+    if not text.strip() or not is_on(harness, session) or os.path.exists(MUTE):
+        return 0
+    # The text goes through an unlinked file, not a pipe: a long reply cannot block us.
+    with tempfile.TemporaryFile() as src:
+        src.write(text.encode())
+        src.seek(0)
+        try:
+            proc = subprocess.Popen(
+                ["say", "--lane", "auto", "--notify"], stdin=src,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True, env={**os.environ, "VOICE_TTS_HARNESS": harness})
+        except OSError as exc:
+            print(f"voice-reply: cannot run say ({exc})", file=sys.stderr)
+            return 1
+    # Lane `auto` queues runs, so earlier live pids stay listed beside the new one.
+    pidfile = path(harness, session, "pid")
+    pids = live_pids(pidfile) + [proc.pid]
+    with open(pidfile, "w") as f:
+        f.write("\n".join(map(str, pids)) + "\n")
+    return 0
+
+
+# --- Claude Code -------------------------------------------------------------
+
+def is_prompt(entry: dict) -> bool:
+    """A real user prompt: not a tool result, not a command expansion (isMeta)."""
+    if entry.get("type") != "user" or entry.get("isMeta") or entry.get("isSidechain"):
+        return False
+    content = (entry.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return True
+    return isinstance(content, list) and any(
+        isinstance(b, dict) and b.get("type") != "tool_result" for b in content)
+
+
+def assistant_texts(entry: dict) -> list[str]:
+    if entry.get("type") != "assistant" or entry.get("isSidechain"):
+        return []
+    content = (entry.get("message") or {}).get("content")
+    if not isinstance(content, list):
+        return []
+    return [b["text"] for b in content
+            if isinstance(b, dict) and b.get("type") == "text" and b.get("text")]
+
+
+def last_turn_text(transcript: str) -> str:
+    """Every assistant text block after the last real prompt, read from the file's tail."""
+    size = os.path.getsize(transcript)
+    window = 1 << 18
+    while True:
+        start = max(0, size - window)
+        with open(transcript, "rb") as f:
+            f.seek(start)
+            lines = f.read().split(b"\n")
+        if start:
+            lines = lines[1:]                          # the first line may be cut
+        entries = []
+        for line in lines:
+            try:
+                entries.append(json.loads(line))
+            except ValueError:
+                pass
+        for i in range(len(entries) - 1, -1, -1):
+            if is_prompt(entries[i]):
+                return "\n\n".join(t for e in entries[i + 1:] for t in assistant_texts(e))
+        if start == 0:
+            return "\n\n".join(t for e in entries for t in assistant_texts(e))
+        window *= 4
+
+
+def block(reason: str) -> None:
+    print(json.dumps({"decision": "block", "reason": reason}))
+
+
+def claude_hook() -> None:
+    data = json.loads(sys.stdin.read() or "{}")
+    session = str(data.get("session_id") or "")
+    if not session:
+        return
+    event = data.get("hook_event_name")
+    if event == "UserPromptSubmit":
+        prompt = str(data.get("prompt") or "")
+        m = VOICE_RE.fullmatch(prompt.strip())
+        if m:
+            sub = m.group(1) or "toggle"
+            block(change(sub, "claude", session) if sub in SUBCOMMANDS
+                  else "usage: /voice on|off|toggle|status")
+        elif is_on("claude", session):
+            cancel("claude", session)
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": "Speech mode is on: write this reply for the ear, "
+                                     f"as in {CONVENTION}."}}))
+    elif event == "Stop" and is_on("claude", session):
+        text = ""
+        try:
+            text = last_turn_text(str(data.get("transcript_path") or ""))
+        except (OSError, ValueError):
+            pass
+        last = str(data.get("last_assistant_message") or "")
+        if last and last.strip() not in text:          # the transcript may lag the hook
+            text = (text + "\n\n" + last).strip()
+        speak("claude", session, text)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="voice-reply", description=__doc__.split("\n")[0])
+    ap.add_argument("command", choices=SUBCOMMANDS + ("speak", "cancel", "claude-hook"))
+    ap.add_argument("--harness", default="")
+    ap.add_argument("--session", default="")
+    args = ap.parse_args()
+    if args.command == "claude-hook":
+        try:
+            claude_hook()
+        except Exception:
+            pass
+        return 0
+    if not args.harness or not args.session:
+        ap.error("--harness and --session are required")
+    h, s = args.harness, args.session
+    if args.command in SUBCOMMANDS:
+        print(state_text(h, s) if args.command == "status" else change(args.command, h, s))
+    elif args.command == "cancel":
+        cancel(h, s)
+    else:
+        return speak(h, s, sys.stdin.read())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

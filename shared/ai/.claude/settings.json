@@ -49,6 +49,28 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$HOME/.claude/hooks/voice-stop.sh\"; [ -x \"$f\" ] || exit 0; \"$f\" || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$HOME/.claude/hooks/voice-stop.sh\"; [ -x \"$f\" ] || exit 0; \"$f\" || true",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
