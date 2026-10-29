@@ -21,6 +21,10 @@ ends with the doctor's line for that cause, so it says what to look at.
 
 `say --doctor` checks the chain once, in order, one line each, and stops at the
 first class that fails: service, token, sink, tools, watcher, config.
+
+One voice at a time. A plain `say` is the user lane: it ends whatever speaks.
+`say --lane auto` (a chat reply) waits its turn, holds while dictation records,
+and is dropped with exit 3 after 30 s held or 2 min in the lane.
 """
 
 from __future__ import annotations
@@ -58,10 +62,11 @@ RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice-tts"
 PREROLL_MS = 300  # silence in front of a cold first sentence; see wake_sink()
 NOTIFY_EVERY_S = 30  # one notification per cause per this many seconds
 HOLD_S = float(os.environ.get("VOICE_TTS_HOLD_S") or 30)  # an auto run held longer is dropped
+QUEUE_S = float(os.environ.get("VOICE_TTS_QUEUE_S") or 120)  # an auto run queued longer is dropped
 NOTIFY_MAX = 300  # characters of a notification body
 AHEAD = 3  # sentences synthesised ahead of the player; more is memory, not speed
 STALL_S = 2.0  # a running player that takes no audio for this long has lost its sink
-STALL_COLD_S = 8.0  # the same, before pw-cat has read anything: a Bluetooth link may still be waking
+STALL_COLD_S = 2.5  # the same, before pw-cat has read anything: a little more room than STALL_S
 PIPE_BYTES = 16384  # player pipe: ~340 ms of audio, so a stall shows within one sentence
 # Per-request limit on the service. A 200-220 character sentence took 3.1 to
 # 7.5 s in the service's own log (2026-10-25..28, under load), and the first
@@ -511,11 +516,16 @@ class Player:
         return now if since is None else since
 
     def _limit(self) -> float:
-        """STALL_S once pw-cat has shown it reads; longer while the sink may be waking.
+        """STALL_S once pw-cat has shown it reads; STALL_COLD_S before that.
 
-        pw-cat reads only once its stream runs, and a Bluetooth sink can take
-        seconds to bring its link up. Bytes written minus bytes still in the
-        pipe is what the player has taken.
+        pw-cat reads only once its stream runs. Bytes written minus bytes still
+        in the pipe is what the player has taken.
+
+        Why no long grace for a waking Bluetooth link: a suspended sink still
+        consumes the pipe at once (measured 2026-10-29: first bytes accepted at
+        0 ms against a suspended sink). A link that is still coming up eats the
+        samples it loses rather than refusing them, so it never looks like this.
+        A pipe nobody drains is a sink that is gone, and 2.5 s keeps R4's 3 s.
         """
         if not self.heard:
             try:
@@ -604,7 +614,10 @@ class Player:
 
 
 class Dropped(Exception):
-    """An `auto` run held past HOLD_S by dictation. Not a failure: no notification."""
+    """An `auto` run held past HOLD_S by dictation, or queued past QUEUE_S.
+
+    Not a failure: no notification.
+    """
 
 
 class Turn:
@@ -616,7 +629,9 @@ class Turn:
     run is a chat reply: it waits behind every earlier run, yields to the user,
     and holds while dictation records, because the microphone would hear it. A
     reply held longer than HOLD_S is dropped: spoken that late it answers a
-    question nobody is still asking.
+    question nobody is still asking. For the same reason a reply that has sat in
+    the lane for QUEUE_S, for any cause (a paused player, a long reply ahead), is
+    dropped too (ruled 2026-10-29).
 
     The registry is one `<pid>.json` per run in RUNTIME_DIR, written from the
     start of the run, not from the first audio, so a waiting run can be seen and
@@ -627,6 +642,7 @@ class Turn:
 
     def __init__(self):
         self.entry: dict = {}
+        self.claimed_at = 0.0
 
     @property
     def path(self) -> Path:
@@ -649,9 +665,10 @@ class Turn:
             self.entry = {"say": os.getpid(), "player": 0, "lane": lane,
                           "state": state, "seq": time.time_ns()}
             _write_entry(self.path, self.entry)
+        self.claimed_at = time.monotonic()
 
     def wait(self, *, poll: float = 0.1):
-        """Block an auto run until it is its turn; raise Dropped past the hold limit."""
+        """Block an auto run until it is its turn; raise Dropped past either limit."""
         if self.entry.get("state") == "playing":
             return
         held_since = None
@@ -672,6 +689,9 @@ class Turn:
             if held_since is not None and time.monotonic() - held_since >= HOLD_S:
                 self.release()
                 raise Dropped(f"dropped: dictation held this reply for {HOLD_S:g} s")
+            if time.monotonic() - self.claimed_at >= QUEUE_S:
+                self.release()
+                raise Dropped(f"dropped: this reply waited {QUEUE_S:g} s in the auto lane")
             time.sleep(poll)
 
     def _ahead(self, *, locked: bool = False) -> bool:
@@ -896,7 +916,8 @@ def main(argv: list[str]) -> int:
                     help="pause if speaking, resume if paused (status 1 if neither)")
     ap.add_argument("--lane", choices=("user", "auto"), default="user",
                     help="user (default) pre-empts any speech; auto waits its turn, "
-                         "yields to user runs and holds while dictation records")
+                         "yields to user runs and holds while dictation records; an auto "
+                         "run is dropped (exit 3) after 30 s held or 2 min in the lane")
     ap.add_argument("--notify", action="store_true",
                     help="also report a failure as a desktop notification (for key binds)")
     ap.add_argument("--doctor", action="store_true",
