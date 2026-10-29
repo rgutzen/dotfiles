@@ -15,13 +15,22 @@ DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DOTFILES"
 
 # --voice is a switch beside the mode, not a mode: it runs voice-tts-setup, which
-# downloads 338 MB, so a plain re-run never does.
+# downloads 338 MB, so a plain re-run never does. A second mode is refused, not
+# resolved: `--dry-run --delete` must never become a real unstow.
 MODE=install
+MODE_SET=
 VOICE=0
 for arg in "$@"; do
     case "$arg" in
         --voice) VOICE=1 ;;
-        *)       MODE="$arg" ;;
+        *)
+            if [[ -n "$MODE_SET" ]]; then
+                echo "✗ two modes given ($MODE, $arg); pick one"
+                exit 1
+            fi
+            MODE="$arg"
+            MODE_SET=1
+            ;;
     esac
 done
 
