@@ -87,7 +87,11 @@ def change(cmd: str, harness: str, session: str) -> str:
 
 
 def live_pids(pidfile: str) -> list[int]:
-    """Pids in the file that are still a `say` leading its own process group."""
+    """Pids in the file that are still a `say` leading its own process group.
+
+    `say` must be an argument's file name (`python3 /…/bin/say …`), not a
+    substring: a reused pid that runs `essay.py` is not ours to kill.
+    """
     try:
         with open(pidfile) as f:
             pids = [int(x) for x in f.read().split()]
@@ -98,7 +102,8 @@ def live_pids(pidfile: str) -> list[int]:
         try:
             with open(f"/proc/{pid}/cmdline", "rb") as f:
                 cmdline = f.read()
-            if b"say" in cmdline and os.getpgid(pid) == pid:
+            argv = cmdline.split(b"\0")[:2]
+            if b"say" in (os.path.basename(a) for a in argv) and os.getpgid(pid) == pid:
                 live.append(pid)
         except (OSError, ProcessLookupError):
             pass
