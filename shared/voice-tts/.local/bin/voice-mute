@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# voice-mute -- one global switch that silences every spoken reply.
+#
+# Usage: voice-mute [toggle|on|off|status]   (default toggle)
+#
+# Bound to a key. The mute is the file $XDG_RUNTIME_DIR/voice-tts/mute holding
+# the ISO-8601 time it was set. Readers test only that it exists: `say --lane
+# auto` drops its run with exit 3, and the pi extension shows `♪ muted`. Going
+# on also runs `say --stop`, which ends every run in both lanes, waiting ones
+# too. The user lane ignores the file: a key press asks for speech now.
+#
+# The key has no terminal, so every change is one notification, and a failure
+# is a notification with its cause, never silence. Both messages share a
+# synchronous hint so the second replaces the first.
+set -uo pipefail
+
+dir="${XDG_RUNTIME_DIR:-/tmp}/voice-tts"
+mute="$dir/mute"
+
+note() {    # note TITLE BODY
+    notify-send --app-name=voice-mute -h string:x-canonical-private-synchronous:voice-mute \
+        "$1" "$2" 2>/dev/null || true
+}
+fail() {
+    note "Voice mute failed" "$(printf '%s' "$1" | head -n 1)"
+    exit 1
+}
+
+case "${1:-toggle}" in
+    status)
+        if [[ -e $mute ]]; then echo muted; exit 0; fi
+        echo unmuted; exit 1 ;;
+    toggle)
+        if [[ -e $mute ]]; then exec "$0" off; else exec "$0" on; fi ;;
+    on)
+        mkdir -p -m 0700 "$dir" 2>/dev/null || [[ -d $dir ]] || fail "cannot create $dir"
+        err="$(date --iso-8601=seconds 2>&1 >"$mute")" || fail "cannot write $mute${err:+: $err}"
+        say --stop >/dev/null 2>&1 || true      # exit 1 only means nothing was speaking
+        note "Speech muted" "Replies stay silent until you press the key again." ;;
+    off)
+        err="$(rm -f "$mute" 2>&1)" || fail "cannot remove $mute: $err"
+        note "Speech unmuted" "Replies are spoken again." ;;
+    *)
+        echo "usage: voice-mute [toggle|on|off|status]" >&2; exit 2 ;;
+esac

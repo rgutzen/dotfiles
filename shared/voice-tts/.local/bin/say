@@ -24,7 +24,8 @@ first class that fails: service, token, sink, tools, watcher, config.
 
 One voice at a time. A plain `say` is the user lane: it ends whatever speaks.
 `say --lane auto` (a chat reply) waits its turn, holds while dictation records,
-and is dropped with exit 3 after 30 s held or 2 min in the lane.
+and is dropped with exit 3 after 30 s held or 2 min in the lane. While the mute
+file (`voice-mute`) exists an `auto` run is dropped with exit 3 at once.
 """
 
 from __future__ import annotations
@@ -59,6 +60,7 @@ ENV_FILE = os.path.expanduser(
 KNOWN_KEYS = {"url", "voice", "speed", "preroll"}
 MAX_SENTENCE = 220  # characters; longer units are split at clause boundaries
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice-tts"
+MUTE_FILE = RUNTIME_DIR / "mute"   # written by voice-mute; only its existence counts
 PREROLL_MS = 300  # silence in front of a cold first sentence; see wake_sink()
 NOTIFY_EVERY_S = 30  # one notification per cause per this many seconds
 HOLD_S = float(os.environ.get("VOICE_TTS_HOLD_S") or 30)  # an auto run held longer is dropped
@@ -656,6 +658,8 @@ class Turn:
 
     def claim(self, lane: str):
         """Enter the registry: pre-empt (user) or join the queue (auto)."""
+        if lane == "auto":
+            self._check_mute()      # before any synthesis: a muted reply costs no CPU
         with _arbiter_lock():
             if lane == "user":
                 stop_all(locked=True)
@@ -673,6 +677,11 @@ class Turn:
             return
         held_since = None
         while True:
+            try:
+                self._check_mute()
+            except Dropped:
+                self.release()
+                raise
             # `voxtype status` may take its 2 s timeout, so it runs outside the
             # lock: a user key press must not wait on it. The queue is read
             # again under the lock before the turn is taken.
@@ -693,6 +702,11 @@ class Turn:
                 self.release()
                 raise Dropped(f"dropped: this reply waited {QUEUE_S:g} s in the auto lane")
             time.sleep(poll)
+
+    @staticmethod
+    def _check_mute():
+        if MUTE_FILE.exists():
+            raise Dropped("dropped: speech is muted")
 
     def _ahead(self, *, locked: bool = False) -> bool:
         """True while a run is playing, or an earlier auto run is waiting."""

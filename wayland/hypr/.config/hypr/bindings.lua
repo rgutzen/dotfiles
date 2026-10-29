@@ -44,3 +44,5 @@ o.bind("SUPER + SHIFT + L", "Dictate", "voice-record")
 o.bind("SUPER + ALT + L", "Speak selection", "speak-selection")
 -- speech out: freeze where it is, press again to continue.
 o.bind("SUPER + ALT + M", "Pause speech", "say --toggle-pause")
+-- speech out: one global mute; stops every lane, chat replies stay silent until pressed again (voice-out C5).
+o.bind("SUPER + ALT + J", "Mute speech", "voice-mute")
