@@ -16,10 +16,11 @@ What is spoken (N4). `--spoken-form rules` (the default; config key
 a code block, a diff, a path or a long identifier is described in words, a
 heading is set off by 500 ms of silence, and 250 ms separates other blocks. The
 silence is written into the player's stream after the block's last sentence,
-and never after the final block. `--spoken-form off`, and `--raw` in any mode,
-keep the older reading: markdown syntax, fenced code, tables and bare URLs are
-dropped, nothing is described, no silence is added. If the rules module cannot
-be imported, `say` prints one line to stderr and reads the plain text.
+and never after the final block. `--spoken-form off` keeps the older reading:
+markdown syntax, fenced code, tables and bare URLs are dropped, nothing is
+described, no silence is added. `--raw`, in either mode, reads the text as
+given: nothing is stripped or described. If the rules module cannot be
+imported, `say` prints one line to stderr and reads the plain text.
 
 A failure prints its cause to stderr. A key binding has no terminal, so the bind
 scripts pass `--notify`: each failure also becomes one desktop notification,
