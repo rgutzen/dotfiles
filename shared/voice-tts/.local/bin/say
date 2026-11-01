@@ -20,7 +20,9 @@ and never after the final block. `--spoken-form off` keeps the older reading:
 markdown syntax, fenced code, tables and bare URLs are dropped, nothing is
 described, no silence is added. `--raw`, in either mode, reads the text as
 given: nothing is stripped or described. If the rules module cannot be
-imported, `say` prints one line to stderr and reads the plain text.
+imported, `say` prints one line to stderr and reads the plain text. A config
+value other than `off` or `rules` is read as `rules`, with one stderr line and,
+under `--notify`, a notification; a bad `--spoken-form` value is exit 1.
 
 A failure prints its cause to stderr. A key binding has no terminal, so the bind
 scripts pass `--notify`: each failure also becomes one desktop notification,
@@ -119,14 +121,14 @@ class Failure(Exception):
 
 
 def notify(cause: str, message: str, *, now: float | None = None,
-           state: Path | None = None, extra=None) -> bool:
+           state: Path | None = None, extra=None, title: str = "Speech failed") -> bool:
     """One desktop notification for a failure, unless this cause had one recently.
 
     The state file holds the time of the last notification per cause, so a key
     pressed five times at a dead service says so once. `now` and `state` are
     there for the tests: nothing has to sleep to cross the window. `extra` is a
     callable returning a line to append (the doctor's); it runs only when a
-    notification is actually sent.
+    notification is actually sent. `title` is for a run that speaks anyway.
     """
     now = time.time() if now is None else now
     state = state or RUNTIME_DIR / "notified.state"   # not *.json: that is the registry
@@ -157,7 +159,7 @@ def notify(cause: str, message: str, *, now: float | None = None,
     if tail:
         line = f"{line} \u2014 {tail}"[:NOTIFY_MAX]
     try:
-        subprocess.run(["notify-send", "--app-name=say", "Speech failed", line],
+        subprocess.run(["notify-send", "--app-name=say", title, line],
                        capture_output=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
         return False
@@ -1118,14 +1120,22 @@ def main(argv: list[str]) -> int:
         speed = float(os.environ.get("VOICE_TTS_SPEED") or cfg.get("speed", 1.0))
     url = args.url or os.environ.get("VOICE_TTS_URL") or cfg.get("url") or DEFAULT_URL
     token = read_token(args.token)
-    args.spoken_form = args.spoken_form or cfg.get("spoken_form") or DEFAULT_SPOKEN_FORM
-    if args.spoken_form not in SPOKEN_FORMS and not args.doctor:
-        message = (f"unknown spoken_form {args.spoken_form!r}; use "
-                   f"{' or '.join(SPOKEN_FORMS)}")
-        print(f"say: {message}", file=sys.stderr)
-        if args.notify:     # a key has no terminal: a bad config must not be silence
-            notify("config", message, extra=lambda: doctor_line("config", url, token))
+    if args.spoken_form is not None and args.spoken_form not in SPOKEN_FORMS:
+        print(f"say: unknown spoken_form {args.spoken_form!r}; use "
+              f"{' or '.join(SPOKEN_FORMS)}", file=sys.stderr)
         return 1
+    form = cfg.get("spoken_form")
+    if not args.spoken_form and form and form not in SPOKEN_FORMS and not args.doctor:
+        # A typo in the config must not silence every key press: read with the
+        # default, and say so (ruled 2026-11-01, review of PR #22).
+        message = (f"spoken_form in {CONF_FILE} is {form!r}, not "
+                   f"{' or '.join(SPOKEN_FORMS)}; reading with {DEFAULT_SPOKEN_FORM}")
+        print(f"say: {message}", file=sys.stderr)
+        if args.notify:     # a key has no terminal
+            notify("config", message, extra=lambda: doctor_line("config", url, token),
+                   title="Speech config ignored")
+        form = None
+    args.spoken_form = args.spoken_form or form or DEFAULT_SPOKEN_FORM
 
     if args.doctor:
         return doctor(url, token)
