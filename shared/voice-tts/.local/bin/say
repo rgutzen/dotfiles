@@ -397,6 +397,9 @@ def doctor_line(cause: str, url: str, token: str) -> str:
     elif cause == "sink":
         ok, detail = check_sink()
         name = "sink"
+    elif cause == "config":
+        ok, detail = check_config()
+        name = "config"
     else:
         return ""
     return f"{'ok  ' if ok else 'FAIL'} {name}: {detail}"
@@ -1116,8 +1119,11 @@ def main(argv: list[str]) -> int:
     token = read_token(args.token)
     args.spoken_form = args.spoken_form or cfg.get("spoken_form") or DEFAULT_SPOKEN_FORM
     if args.spoken_form not in SPOKEN_FORMS and not args.doctor:
-        print(f"say: unknown spoken_form {args.spoken_form!r}; use "
-              f"{' or '.join(SPOKEN_FORMS)}", file=sys.stderr)
+        message = (f"unknown spoken_form {args.spoken_form!r}; use "
+                   f"{' or '.join(SPOKEN_FORMS)}")
+        print(f"say: {message}", file=sys.stderr)
+        if args.notify:     # a key has no terminal: a bad config must not be silence
+            notify("config", message, extra=lambda: doctor_line("config", url, token))
         return 1
 
     if args.doctor:
