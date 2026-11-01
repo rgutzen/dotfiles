@@ -381,7 +381,7 @@ def check_config() -> tuple[bool, str]:
     if unknown:
         return False, f"unknown key in {CONF_FILE}: {', '.join(unknown)}"
     form = read_config().get("spoken_form")
-    if form is not None and form not in SPOKEN_FORMS:
+    if form and form not in SPOKEN_FORMS:     # empty is unset, as `say` reads it
         return False, f"spoken_form in {CONF_FILE} is {form!r}; use {' or '.join(SPOKEN_FORMS)}"
     return True, f"{CONF_FILE}, keys known"
 
