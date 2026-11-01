@@ -11,8 +11,15 @@ an artifact and it reads the prose, skipping what cannot be spoken.
     say --voice bm_george --speed 1.1 "Slower is not always clearer."
     say --out /tmp/reply.wav --no-play "Write to a file instead."
 
-Text that is not speech is dropped on the way in: fenced code, tables, bare URLs
-and markdown syntax. Pronunciation of paths and symbols is not attempted.
+What is spoken (N4). `--spoken-form rules` (the default; config key
+`spoken_form`) reads the text through `lib/voice-tts/spoken_form.py`: a table,
+a code block, a diff, a path or a long identifier is described in words, a
+heading is set off by 500 ms of silence, and 250 ms separates other blocks. The
+silence is written into the player's stream after the block's last sentence,
+and never after the final block. `--spoken-form off`, and `--raw` in any mode,
+keep the older reading: markdown syntax, fenced code, tables and bare URLs are
+dropped, nothing is described, no silence is added. If the rules module cannot
+be imported, `say` prints one line to stderr and reads the plain text.
 
 A failure prints its cause to stderr. A key binding has no terminal, so the bind
 scripts pass `--notify`: each failure also becomes one desktop notification,
@@ -68,7 +75,10 @@ CONF_FILE = os.path.expanduser(
 ENV_FILE = os.path.expanduser(
     os.environ.get("VOICE_TTS_ENV", "~/.config/pazras/voice-tts.env")
 )
-KNOWN_KEYS = {"url", "voice", "speed", "preroll"}
+KNOWN_KEYS = {"url", "voice", "speed", "preroll", "spoken_form"}
+SPOKEN_FORMS = ("off", "rules")
+DEFAULT_SPOKEN_FORM = "rules"
+LIB_DIR = Path(__file__).resolve().parent.parent / "lib" / "voice-tts"
 MAX_SENTENCE = 220  # characters; longer units are split at clause boundaries
 RUNTIME_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "voice-tts"
 MUTE_FILE = RUNTIME_DIR / "mute"   # written by voice-mute; only its existence counts
@@ -370,6 +380,9 @@ def check_config() -> tuple[bool, str]:
     unknown = sorted(set(keys) - KNOWN_KEYS)
     if unknown:
         return False, f"unknown key in {CONF_FILE}: {', '.join(unknown)}"
+    form = read_config().get("spoken_form")
+    if form is not None and form not in SPOKEN_FORMS:
+        return False, f"spoken_form in {CONF_FILE} is {form!r}; use {' or '.join(SPOKEN_FORMS)}"
     return True, f"{CONF_FILE}, keys known"
 
 
@@ -1058,6 +1071,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out", help="write a single concatenated WAV here instead of playing")
     ap.add_argument("--no-play", action="store_true", help="synthesise only, write nothing")
     ap.add_argument("--raw", action="store_true", help="read the text verbatim, no cleaning")
+    ap.add_argument("--spoken-form", metavar="MODE",
+                    help="off: strip markdown only; rules: describe tables, code, paths "
+                         "and pause at headings (default: config, else rules)")
     ap.add_argument("--preroll", type=int, metavar="MS",
                     help="silence sent ahead of a cold first sentence (default %d)" % PREROLL_MS)
     ap.add_argument("--stop", action="store_true",
@@ -1098,6 +1114,11 @@ def main(argv: list[str]) -> int:
         speed = float(os.environ.get("VOICE_TTS_SPEED") or cfg.get("speed", 1.0))
     url = args.url or os.environ.get("VOICE_TTS_URL") or cfg.get("url") or DEFAULT_URL
     token = read_token(args.token)
+    args.spoken_form = args.spoken_form or cfg.get("spoken_form") or DEFAULT_SPOKEN_FORM
+    if args.spoken_form not in SPOKEN_FORMS and not args.doctor:
+        print(f"say: unknown spoken_form {args.spoken_form!r}; use "
+              f"{' or '.join(SPOKEN_FORMS)}", file=sys.stderr)
+        return 1
 
     if args.doctor:
         return doctor(url, token)
@@ -1137,6 +1158,51 @@ def main(argv: list[str]) -> int:
         TURN.release()
 
 
+def load_spoken_form():
+    """The rules module from `../lib/voice-tts` beside the resolved script."""
+    import importlib.util
+
+    path = LIB_DIR / "spoken_form.py"
+    spec = importlib.util.spec_from_file_location("spoken_form", path)
+    if spec is None or spec.loader is None or not path.is_file():
+        raise ImportError(f"{path} not found")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["spoken_form"] = mod    # a dataclass looks its module up here
+    sys.dont_write_bytecode = True      # no __pycache__ inside the stow package
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop("spoken_form", None)
+        raise
+    return mod
+
+
+def plan(raw: str, *, mode: str, raw_mode: bool) -> tuple[list[tuple[str, int]], int]:
+    """The sentences to synthesise, each with the silence (ms) after it, and the
+    length of the text they read (the usage log's `chars`)."""
+    if mode == "rules" and not raw_mode:
+        try:
+            segments = load_spoken_form().segments(raw)
+        except Exception as exc:  # noqa: BLE001 - never fall silent
+            print(f"say: spoken-form rules unavailable ({exc}); reading the plain text",
+                  file=sys.stderr)
+        else:
+            units: list[tuple[str, int]] = []
+            spoken: list[str] = []
+            for text, pause in segments:
+                text = re.sub(r"\s+", " ", text).strip()
+                sentences = split_sentences(text)
+                units += [(s, 0) for s in sentences]
+                if sentences:
+                    units[-1] = (units[-1][0], pause)
+                    spoken.append(text)
+            if units:
+                units[-1] = (units[-1][0], 0)       # no silence after the last block
+            return units, len(" ".join(spoken))
+    text = raw if raw_mode else strip_unspoken(raw)
+    return ([(s, 0) for s in split_sentences(text)] if text else []), len(text)
+
+
 def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
           token: str) -> int:
     """Read the input, then synthesise and play it sentence by sentence."""
@@ -1155,12 +1221,12 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
             raise Failure("input", f"cannot read {args.file} ({exc.strerror})")
     else:
         raw = sys.stdin.read()
-    text = raw if args.raw else strip_unspoken(raw)
-    if not text:
+    units, chars = plan(raw, mode=args.spoken_form, raw_mode=args.raw)
+    if not units:
         raise Failure("empty", "nothing to speak: the input has no speakable text")
 
-    USAGE.chars = len(text)
-    sentences = split_sentences(text)
+    sentences = [s for s, _ in units]
+    USAGE.chars = chars
 
     chunks: queue.Queue = queue.Queue(maxsize=AHEAD)
     done = threading.Event()
@@ -1169,12 +1235,15 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
 
     def producer():
         try:
-            for i, sentence in enumerate(sentences):
+            for i, (sentence, pause_ms) in enumerate(units):
                 if stop.is_set():
                     return
                 t0 = time.perf_counter()
                 pcm = synth(sentence, url=url, token=token, voice=voice, speed=speed)
-                item = (i, sentence, pcm, time.perf_counter() - t0)
+                took = time.perf_counter() - t0
+                if pause_ms:
+                    pcm += b"\x00\x00" * (24000 * pause_ms // 1000)
+                item = (i, sentence, pcm, took, pause_ms)
                 while not stop.is_set():    # the consumer may be gone: never wait forever
                     try:
                         chunks.put(item, timeout=0.1)
@@ -1210,14 +1279,16 @@ def speak(args, *, cfg: dict[str, str], voice: str, speed: float, url: str,
             if failure:
                 break
             try:
-                i, sentence, pcm, took = chunks.get(timeout=0.1)
+                i, sentence, pcm, took, pause_ms = chunks.get(timeout=0.1)
             except queue.Empty:
                 if done.is_set():
                     break
                 continue
             if args.verbose:
-                print(f"[{i + 1}/{len(sentences)}] {took * 1000:.0f} ms · {len(pcm) // 48} ms "
-                      f"audio · {sentence[:60]!r}", file=sys.stderr)
+                print(f"[{i + 1}/{len(sentences)}] {took * 1000:.0f} ms · "
+                      f"{len(pcm) // 48 - pause_ms} ms audio · {sentence[:60]!r}", file=sys.stderr)
+                if pause_ms:
+                    print(f"[{i + 1}/{len(sentences)}] pause {pause_ms} ms", file=sys.stderr)
             if first_audio_at is None:
                 first_audio_at = time.perf_counter() - t_start
             if args.out:

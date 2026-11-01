@@ -9,3 +9,7 @@ speed = 1.0
 # before synthesising; preroll is the silence that covers the rest. Raise it if
 # the first word is still clipped, drop it to 0 once the sink stays warm.
 preroll = 300
+# What is read aloud: rules describes tables, code, paths and long identifiers
+# in words and pauses at headings; off only strips markdown. `say --spoken-form`
+# overrides it for one run.
+spoken_form = rules
