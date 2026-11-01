@@ -30,7 +30,7 @@ at most one per cause every 30 s, and a success stays quiet. The notification
 ends with the doctor's line for that cause, so it says what to look at.
 
 `say --doctor` checks the chain once, in order, one line each, and stops at the
-first class that fails: service, token, sink, tools, watcher, config.
+first class that fails: service, token, sink, tools, watcher, config, rules.
 
 One voice at a time. A plain `say` is the user lane: it ends whatever speaks.
 `say --lane auto` (a chat reply) waits its turn, holds while dictation records,
@@ -389,6 +389,22 @@ def check_config() -> tuple[bool, str]:
     return True, f"{CONF_FILE}, keys known"
 
 
+def check_rules() -> tuple[bool, str]:
+    """The rules module loads and reads a sample. Without this line a broken
+    module is invisible: `say` falls back to the plain text, and every caller
+    discards the stderr line that says so."""
+    if read_config().get("spoken_form") == "off":
+        return True, "spoken_form = off; the rules are not used"
+    path = LIB_DIR / "spoken_form.py"
+    try:
+        segments = load_spoken_form().segments("# Check\n\nA sentence.\n")
+        if not segments:
+            raise ValueError("a sample gave nothing to speak")
+    except Exception as exc:  # noqa: BLE001 - the cause is the line
+        return False, f"{path} fails ({type(exc).__name__}: {exc}); say reads the plain text"
+    return True, f"{path} loads"
+
+
 def doctor_line(cause: str, url: str, token: str) -> str:
     """The one doctor line for a failure's cause, or "" if no check matches."""
     if cause in ("unreachable", "service"):
@@ -411,7 +427,7 @@ def doctor_line(cause: str, url: str, token: str) -> str:
 def doctor(url: str, token: str) -> int:
     """Run the check classes in order; stop at the first class that fails.
 
-    WHY. A dead key press says only that something is wrong. The chain has six
+    WHY. A dead key press says only that something is wrong. The chain has seven
     links and the earlier ones explain the later ones (no unit, so no health;
     no token, so a 401), so the first failure is the one worth fixing. Nothing
     here speaks, wakes the sink, writes the registry or notifies.
@@ -419,7 +435,8 @@ def doctor(url: str, token: str) -> int:
     checks = (("service", lambda: check_service(url, token)),
               ("token", lambda: check_token(url, token)),
               ("sink", check_sink), ("tools", check_tools),
-              ("watcher", check_watcher), ("config", check_config))
+              ("watcher", check_watcher), ("config", check_config),
+              ("rules", check_rules))
     for name, run in checks:
         ok, detail = run()
         print(f"{'ok  ' if ok else 'FAIL'} {name}: {detail}")
@@ -1095,7 +1112,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--notify", action="store_true",
                     help="also report a failure as a desktop notification (for key binds)")
     ap.add_argument("--doctor", action="store_true",
-                    help="check the service, token, sink, tools, watcher and config; exit 1 on the first failure")
+                    help="check the service, token, sink, tools, watcher, config and rules; "
+                         "exit 1 on the first failure")
     ap.add_argument("--stats", nargs="?", type=float, const=0, metavar="DAYS",
                     help="summarise the usage log (the last DAYS days, else all) and exit")
     ap.add_argument("--verbose", "-v", action="store_true", help="print per-sentence timing")
