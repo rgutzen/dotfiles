@@ -36,6 +36,7 @@ credentials
 # machine-local / secret-bearing overrides (see secrets.example/)
 local.sh
 secrets.env
+**/.config/git/local
 *.local
 
 # *.local above is meant for override-marker files (foo.local), but as a
