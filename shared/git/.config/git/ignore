@@ -1,1 +1,3 @@
 **/.claude/settings.local.json
+# worktrees live inside their repository: <repo>/.worktrees/<name> (06_SYSTEM dec-16642059)
+.worktrees/
