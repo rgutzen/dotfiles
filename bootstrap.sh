@@ -281,7 +281,7 @@ fi
 # already lives in PAZRAS_TIMERS (06_SYSTEM/engine/structure/pazras-master-
 # config.sh) — the same hardcoded-list drift pazras-healthcheck now audits
 # for (agents/knowledge/system/schedule/scheduled-processes.md). It had already
-# silently fallen behind: pazras-memory, pazras-lore-sync and pazras-reconcile
+# silently fallen behind: pazras-memory and pazras-reconcile
 # were enabled by hand and never added here. Source the config instead so
 # there is exactly one place a new scheduled process gets registered.
 if command -v systemctl >/dev/null && [[ -d "$HOME/.config/systemd/user" ]]; then

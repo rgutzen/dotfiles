@@ -341,9 +341,9 @@ the way the other `plugin:` entries do.
 ### 4. Hermes
 Hermes has its own installer and is **not** part of this dotfiles package —
 it manages a systemd gateway service, Signal integration, and its own plugin
-set (Lore memory, eagle-eye skill routing, rtk-rewrite). Run its own
-`setup-hermes.sh`, then restore `.hermes.md`/project `.lore.md` files from
-wherever they're backed up. See `HERMES-SIGNAL-SETUP.md` (in `B_Tech/`, not
+set (eagle-eye skill routing, rtk-rewrite). Run its own
+`setup-hermes.sh`, then restore `.hermes.md` from
+wherever it is backed up. See `HERMES-SIGNAL-SETUP.md` (in `B_Tech/`, not
 this repo — it names a personal phone number, so it stays out of any git
 repo) for the Signal-side configuration.
 
