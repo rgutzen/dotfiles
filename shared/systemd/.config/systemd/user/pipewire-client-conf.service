@@ -1,0 +1,28 @@
+[Unit]
+Description=Regenerate the PipeWire client.conf override from the packaged config
+Documentation=file:%h/06_SYSTEM/engine/host/pipewire-client-conf.sh
+# The failure this guards against is a silent one, so a guard that cannot do
+# its job must say so out loud rather than leave a stale-looking override.
+OnFailure=notify@%n.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/06_SYSTEM/engine/host/pipewire-client-conf.sh
+# A process keeps the rlimits it started with, so a regenerated override only
+# helps clients started afterwards. voxtype is restarted because it is the
+# program this override exists for: with the old grant path it is SIGKILLed
+# one second into every recording, and that failure is silent. A restart costs
+# one model load (~2 s) and happens only when the packaged file changed.
+ExecStartPost=-systemctl --user try-restart voxtype.service
+Nice=19
+IOSchedulingClass=idle
+
+[Install]
+# Enabled as well as path-triggered, on purpose. The path unit only fires on an
+# UPGRADE; enabling this reconciles the override once per login too, so a file
+# that drifted while the units were not yet installed still gets repaired
+# rather than waiting for the next pipewire release.
+WantedBy=default.target

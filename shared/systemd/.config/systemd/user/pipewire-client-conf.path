@@ -1,0 +1,19 @@
+[Unit]
+Description=Watch the packaged PipeWire client.conf for an upgrade
+Documentation=file:%h/06_SYSTEM/engine/host/pipewire-client-conf.sh
+
+[Path]
+# PathChanged, not PathExists. A path unit fires while its condition HOLDS, so
+# PathExists on a file that is always there would re-trigger continuously —
+# the trap already documented in pazras-archive-flush.path. PathChanged fires
+# on the write/rename that a package upgrade performs, and the service never
+# touches this path, so there is no loop.
+#
+# The subject is the PACKAGED file: when it changes, the full-copy override in
+# ~/.config/pipewire is out of date and must be rebuilt. Nothing else in the
+# tree needs watching.
+PathChanged=/usr/share/pipewire/client.conf
+Unit=pipewire-client-conf.service
+
+[Install]
+WantedBy=default.target
