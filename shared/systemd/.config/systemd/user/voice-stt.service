@@ -1,0 +1,29 @@
+[Unit]
+Description=voice-stt — OpenAI-compatible speech-to-text on the LAN
+Documentation=file:%h/06_SYSTEM/dev/capture/prototype/voice-stt.py
+After=network-online.target
+Wants=network-online.target
+OnFailure=notify@%n.service
+# RestartSec=3 sits INSIDE systemd's default start-limit window (5 starts in
+# 10 s), so the limiter never trips and a broken ExecStart loops forever
+# instead of failing once. It did exactly that for 12 days (2026-10-25 to
+# 2026-11-06, 18k-25k restarts per boot) while showing `active`. Widen the
+# window so five attempts inside five minutes trip it and the unit goes
+# `failed`, where OnFailure and `systemctl --user --failed` can see it.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/pazras/voice-stt.env
+Environment=VOICE_STT_THREADS=16
+Environment=VOICE_STT_MODELS=%h/.local/share/voice-stt/models
+ExecStart=%h/.local/share/voice-stt/venv/bin/python %h/06_SYSTEM/dev/capture/prototype/voice-stt.py serve --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=3
+# The model is ~1.6 GB resident; keep it out of the way of the compositor.
+Nice=5
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=default.target
