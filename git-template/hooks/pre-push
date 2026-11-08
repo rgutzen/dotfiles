@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# written by engine/checks/push_gate.py --arm -- regenerate, do not edit.
+# chain: push_gate.py, push_guard.py, leak_gate.py
+set -uo pipefail
+REPO_TREE="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_PREFIX \
+    -u GIT_COMMON_DIR git rev-parse --show-toplevel)"
+refs="$(cat)"
+LOCAL="$(dirname "$0")/pre-push.local"
+if [[ -x "$LOCAL" ]] && [[ "$(readlink -f "$LOCAL")" != "$(readlink -f "$0")" ]]; then
+    printf "%s\n" "$refs" | "$LOCAL" "$@" || exit $?
+fi
+
+if [[ -x "$REPO_TREE/engine/checks/pre-push" ]]; then
+    printf "%s\n" "$refs" | "$REPO_TREE/engine/checks/pre-push" "$@"
+    exit $?
+fi
+python3 "$HOME"/06_SYSTEM/engine/checks/push_gate.py --tree "$REPO_TREE" --url "${2:-}" <<<"$refs" || exit $?
+exec python3 "$HOME"/06_SYSTEM/engine/checks/leak_gate.py --tree "$REPO_TREE" --url "${2:-}" --quiet <<<"$refs"

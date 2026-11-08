@@ -1,5 +1,9 @@
 [init]
 	defaultBranch = main
+	# Every `git init` and `git clone` copies the push gate's hook from here.
+	# Outside the stow packages on purpose: git copies a symlink as a symlink,
+	# and a stowed link is relative, so it would dangle inside .git/hooks/.
+	templateDir = ~/02_AREAS/B_Tech/dotfiles/git-template
 
 [include]
 	path = ~/.config/git/local
