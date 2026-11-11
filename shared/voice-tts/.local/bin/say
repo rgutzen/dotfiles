@@ -99,6 +99,10 @@ STALL_COLD_S = 2.5  # the same, before pw-cat has read anything: a little more r
 # in `init` and no stream starts, so the microphone and speakers fail together
 # (2026-11-11: paused at 23:52, wedged at 00:34, found at 09:32).
 PAUSE_MAX_S = float(os.environ.get("VOICE_TTS_PAUSE_MAX_S") or 300)
+# The same limit when this run is gone and its player stays frozen: `--pause`
+# starts a one-shot systemd timer per player that runs `say --reap`. Later than
+# PAUSE_MAX_S, so a live run ends first and with its own message.
+REAP_AFTER_S = PAUSE_MAX_S + 30
 PIPE_BYTES = 16384  # player pipe: ~340 ms of audio, so a stall shows within one sentence
 # Per-request limit on the service. A 200-220 character sentence took 3.1 to
 # 7.5 s in the service's own log (2026-10-25..28, under load), and the first
@@ -639,12 +643,15 @@ class Player:
         return True
 
     def kill(self):
-        """End the player now and leave no registry entry."""
+        """End the player now and leave no registry entry, nor a reaper for it."""
+        paused = _state(self.proc.pid) == "T"
         try:
             self.proc.kill()
         except OSError:
             pass
         self.proc.wait()
+        if paused:
+            cancel_reap(self.proc.pid)
         unregister()
 
     def close(self):
@@ -1020,8 +1027,67 @@ def signal_players(sig: int, *, only_state: str | None = None) -> int:
             os.kill(pid, sig)
             acted += 1
         except OSError:
-            pass
+            continue
+        if sig == signal.SIGSTOP:
+            schedule_reap(pid)
+        elif sig == signal.SIGCONT:
+            cancel_reap(pid)
     return acted
+
+
+def _started(pid: int) -> str:
+    """Start time in clock ticks, which tells a process from a later one with its pid."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return ""
+
+
+def cancel_reap(pid: int):
+    try:
+        subprocess.run(["systemctl", "--user", "stop", f"say-reap-{pid}.timer"],
+                       capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def schedule_reap(pid: int):
+    """Kill this paused player in REAP_AFTER_S unless it is resumed first.
+
+    WHY. The run's own PAUSE_MAX_S lives in its process; a run that dies while
+    paused leaves a frozen player nothing else ends. A transient timer is the
+    one process that waits, and only while a pause lasts. Without systemd-run
+    the pause still holds; only the backstop is missing.
+    """
+    cancel_reap(pid)    # a pause after a resume replaces the earlier timer
+    try:
+        subprocess.run(["systemd-run", "--user", "--quiet", "--collect",
+                        f"--unit=say-reap-{pid}", f"--on-active={REAP_AFTER_S:.0f}s",
+                        str(Path(__file__).resolve()), "--reap", f"{pid}:{_started(pid)}"],
+                       capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def reap(spec: str) -> int:
+    """SIGKILL the player `PID:START` if it is the same process and still paused.
+
+    SIGKILL, because a stopped process holds a SIGTERM until it is continued,
+    and SIGCONT first would play the rest of an abandoned reply. A player that
+    is gone, playing, or another process with its pid is left alone, and that
+    is success: exit 1 is a malformed spec or a kill that failed.
+    """
+    pid, _, start = spec.partition(":")
+    if not pid.isdigit() or not start:
+        return 1
+    pid = int(pid)
+    if _state(pid) != "T" or _started(pid) != start or not _is_speech(pid):
+        return 0
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        return 1
+    return 0
 
 
 def pause_or_resume() -> int:
@@ -1055,6 +1121,7 @@ def stop_all(*, locked: bool = False) -> int:
                     os.kill(pid, signal.SIGCONT)
                 except OSError:
                     pass
+                cancel_reap(pid)
         for sig in (15, 9):
             for pid in pids:
                 if not _is_speech(pid):
@@ -1119,6 +1186,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--resume", action="store_true", help="continue a paused run")
     ap.add_argument("--toggle-pause", action="store_true",
                     help="pause if speaking, resume if paused (status 1 if neither)")
+    ap.add_argument("--reap", metavar="PID:START",
+                    help="kill a player still paused (run by the timer --pause starts)")
     ap.add_argument("--lane", choices=("user", "auto"), default="user",
                     help="user (default) pre-empts any speech; auto waits its turn, "
                          "yields to user runs and holds while dictation records; an auto "
@@ -1144,6 +1213,8 @@ def main(argv: list[str]) -> int:
         return 0 if signal_players(signal.SIGCONT, only_state="T") else 1
     if args.toggle_pause:
         return pause_or_resume()
+    if args.reap:
+        return reap(args.reap)
 
     cfg = read_config()
     voice = args.voice or os.environ.get("VOICE_TTS_VOICE") or cfg.get("voice") or DEFAULT_VOICE
