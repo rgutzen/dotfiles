@@ -6,13 +6,15 @@ a hash read letter by letter. This module classifies each block and rewrites it
 by rules into a short spoken description. Pure functions, no I/O, so `say`, the
 phone's `psay` and the tests share it (dev/voice-out/SPECS.md N1, decision 12).
 
-Two promises, both tested on every fixture:
+Three promises, each tested on every fixture:
 
 - **Never silent.** Every block yields a sentence. A code block is named and
   counted, not dropped.
 - **Never a changed number.** Every run of digits in the output occurs in the
   input. Counts the rules add (rows, lines) are spelled out in words, and an
   identifier that is kept is kept verbatim.
+- **Never a marker.** No asterisk reaches the voice: emphasis, a bullet and a
+  glob are markup, and "asterisk" is the one word they would add.
 
     blocks = classify(text)      # [Block(kind, text, lang, rewrite)]
     speech = spoken(text)        # one string, one block per line
@@ -469,7 +471,27 @@ def _is_path_list(rows: list[str]) -> bool:
     return hits >= max(1, round(len(rows) * 0.8))
 
 
-# ------------------------------------------------------------------ rewrite per class
+# ------------------------------------------------------------------ the last pass
+
+
+STAR = re.compile(r"\*+")
+
+
+def markers(text: str) -> str:
+    """No asterisk reaches the voice: it is always a marker, never a word.
+
+    The emphasis pass pairs `**` and `*` around a span, and it misses three
+    shapes: a closing marker glued to a word (`**qwen4a**_smoke`), a run left
+    unpaired by an earlier one (`conventions/**`), and a lone star. All three
+    were read aloud as "asterisk". Runs are removed here, once per block, after
+    every rule, so a quoted span of code is covered too.
+    """
+    if "*" not in text:
+        return text
+    text = STAR.sub("", text)
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\s+([,.;:!?]+)(?=\s|$)", r"\1", text)   # never glue a path's dot
+    return text.strip()
 
 
 def rewrite(block: Block) -> str:
@@ -478,7 +500,7 @@ def rewrite(block: Block) -> str:
         out = _RULES[block.kind](block)
     except Exception:  # noqa: BLE001 - a bug in one rule must not drop the block
         out = sentence(strip_unspoken(block.text))
-    out = out or "a passage with nothing to read aloud."
+    out = markers(out) or "a passage with nothing to read aloud."
     if block.kind not in ("prose", "bullets", "heading"):
         out = out[:1].upper() + out[1:]                  # a description starts a sentence
     return out
