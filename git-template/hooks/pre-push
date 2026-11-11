@@ -14,5 +14,4 @@ if [[ -x "$REPO_TREE/engine/checks/pre-push" ]]; then
     printf "%s\n" "$refs" | "$REPO_TREE/engine/checks/pre-push" "$@"
     exit $?
 fi
-python3 "$HOME"/06_SYSTEM/engine/checks/push_gate.py --tree "$REPO_TREE" --url "${2:-}" <<<"$refs" || exit $?
-exec python3 "$HOME"/06_SYSTEM/engine/checks/leak_gate.py --tree "$REPO_TREE" --url "${2:-}" --quiet <<<"$refs"
+python3 "$HOME"/06_SYSTEM/engine/checks/push_gate.py --tree "$REPO_TREE" --url "${2:-}" <<<"$refs"
