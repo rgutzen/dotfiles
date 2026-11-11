@@ -93,6 +93,12 @@ NOTIFY_MAX = 300  # characters of a notification body
 AHEAD = 3  # sentences synthesised ahead of the player; more is memory, not speed
 STALL_S = 2.0  # a running player that takes no audio for this long has lost its sink
 STALL_COLD_S = 2.5  # the same, before pw-cat has read anything: a little more room than STALL_S
+# A paused player held longer is killed and the run ends. Pause is SIGSTOP, and a
+# stopped PipeWire client answers nothing: when its sink fails while it is frozen
+# (a Bluetooth headset that powers off overnight), every link on the machine stays
+# in `init` and no stream starts, so the microphone and speakers fail together
+# (2026-11-11: paused at 23:52, wedged at 00:34, found at 09:32).
+PAUSE_MAX_S = float(os.environ.get("VOICE_TTS_PAUSE_MAX_S") or 300)
 PIPE_BYTES = 16384  # player pipe: ~340 ms of audio, so a stall shows within one sentence
 # Per-request limit on the service. A 200-220 character sentence took 3.1 to
 # 7.5 s in the service's own log (2026-10-25..28, under load), and the first
@@ -551,6 +557,7 @@ class Player:
         self.first = True
         self.written = 0
         self.heard = False  # pw-cat has read from the pipe at least once
+        self.paused_at = None  # when the player was first seen stopped, this pause
         self.silence = b"\x00\x00" * int(rate * max(0, preroll_ms) / 1000) if cold else b""
         self.register()
 
@@ -558,11 +565,18 @@ class Player:
         """The start of the current idle spell, or None while the player is paused.
 
         A stopped player (`say --pause`, state "T") takes no audio on purpose;
-        the spell restarts when it is resumed, so a pause of any length is not
-        a stall.
+        the spell restarts when it is resumed, so a pause is not a stall. A pause
+        longer than PAUSE_MAX_S ends the run: see there for why a frozen player
+        must not outlive the user's attention.
         """
         if _state(self.proc.pid) == "T":
+            if self.paused_at is None:
+                self.paused_at = now
+            elif now - self.paused_at >= PAUSE_MAX_S:
+                self.kill()
+                raise Failure("paused", f"paused for {PAUSE_MAX_S:.0f} s; the run ended")
             return None
+        self.paused_at = None
         return now if since is None else since
 
     def _limit(self) -> float:
