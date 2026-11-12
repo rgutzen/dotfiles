@@ -19,7 +19,7 @@
         ]
       },
       {
-        "matcher": "Read|Edit|Write|NotebookEdit|Glob|Grep|Bash",
+        "matcher": "Read|Edit|Write|NotebookEdit|Glob|Grep|Bash|mcp__.*",
         "hooks": [
           {
             "type": "command",
