@@ -1,0 +1,27 @@
+{
+  "toolActivation": "dynamic",
+  "toolExposure": "deferred",
+  "webSearch": {
+    "allowedProviders": ["exa", "brave", "degoog", "duckduckgo"]
+  },
+  "searchRouting": {
+    "providers": ["exa", "brave", "degoog", "duckduckgo"],
+    "fallbackOn": ["unsupported", "transient", "quota", "network", "invalid-response"]
+  },
+  "fetch": {
+    "answerProvider": "deepseek",
+    "answerModel": "deepseek-flash"
+  },
+  "tools": {
+    "sourceCheck": { "enabled": false }
+  },
+  "commands": {
+    "websearch": { "enabled": false },
+    "curator": { "enabled": false },
+    "search": { "enabled": false },
+    "google-account": { "enabled": false }
+  },
+  "pdf": {
+    "enabled": false
+  }
+}
