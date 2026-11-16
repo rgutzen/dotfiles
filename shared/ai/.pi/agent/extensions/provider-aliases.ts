@@ -14,6 +14,8 @@
 // PI_PROFILE=<account> and unsets the personal keys. At session start this
 // extension then moves a model on <provider> to the same model on
 // <provider>-<account>, so defaults and resumed sessions bill the profile's account.
+// A profile that shares another's keys (an overflow seat) carries that profile in
+// PI_PROFILE_KEYS, and its models move to that profile's aliases.
 //
 // To support another provider, add its key variable to PROVIDERS.
 
@@ -63,7 +65,7 @@ export default async function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     register(pi, ctx.modelRegistry.getAll() as unknown as CatalogModel[])
 
-    const profile = process.env.PI_PROFILE
+    const profile = process.env.PI_PROFILE_KEYS || process.env.PI_PROFILE
     const current = ctx.model
     if (!profile || !current || !(current.provider in PROVIDERS)) return
     const target = ctx.modelRegistry.find(`${current.provider}-${profile}`, current.id)

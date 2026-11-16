@@ -14,12 +14,22 @@
 #     account's config home, so Claude history, settings and skills are the one
 #     shared set Omarchy maintains. Otherwise the profile keeps a private login
 #     in ~/.claude-<profile>.
-#   - API keys: for every <KEY>_<PROFILE> variable, the personal <KEY> is unset,
-#     so the personal provider ID drops out of /model.
+#   - API keys: only this profile's own <KEY>_<PROFILE> variables stay; every
+#     other *_API_KEY / *_API_TOKEN / *_ACCESS_TOKEN is unset, so no personal
+#     provider ID reaches /model, whether or not a company twin exists.
 #   - Nothing else gets in: an exported ANTHROPIC_* credential or base URL, or
 #     CLAUDE_CODE_OAUTH_TOKEN, outranks the login the profile just chose.
 #   - PI_PROFILE: the provider-aliases extension moves the session's model to
 #     the <provider>-<profile> alias.
+#
+# Overflow. 06_SYSTEM's profiles.yaml may give a profile an ordered `overflow:`
+# list of other profiles, and a profile a `keys:` profile whose <KEY>_<PROFILE>
+# keys it shares (a second Claude seat of the same account holder). Before pi
+# starts, `familiar orchestration profile pick` names the first profile in the
+# chain whose Claude window has room; when that is another one, this execs
+# pi-<that profile>. The account stays bound for the whole process, so a window
+# that runs out mid-session takes a restart (`pi-<profile> -c` continues the
+# session on the next account). Without 06_SYSTEM a profile runs alone.
 #
 # The directory decides which profile runs (see 40-ai.sh: a .pi-profile file
 # names it). That deliberately overrides Omarchy's machine-wide active account:
@@ -39,8 +49,6 @@ if [[ "$profile" == profile || -z "$profile" ]]; then
     echo "pi-profile: call through a pi-<profile> symlink, e.g. pi-teres" >&2
     exit 2
 fi
-suffix="_${profile^^}"
-
 export PI_PROFILE="$profile"
 
 # The config home of the Omarchy account named like this profile. Prints
@@ -101,9 +109,43 @@ case "${1:-}" in
         ;;
 esac
 
+# The overflow hand-over, and whose API keys this profile spends (see the top).
+# PI_PROFILE_PINNED marks a launch that was already handed over, so it never loops.
+keys="$profile"
+if command -v familiar >/dev/null 2>&1; then
+    pin=()
+    [[ -n "${PI_PROFILE_PINNED:-}" ]] && pin=(--pinned)
+    if picked=$(timeout 20 familiar orchestration profile pick "$profile" "${pin[@]}" 2>/dev/null); then
+        { read -r run; read -r keys; read -r why; } <<<"$picked" || true
+        if [[ -n "$run" && "$run" != "$profile" ]] && command -v "pi-$run" >/dev/null 2>&1; then
+            echo "pi-$profile: $why; running as pi-$run" >&2
+            PI_PROFILE_PINNED=1 exec "pi-$run" "$@"
+        fi
+        [[ -n "$why" ]] && echo "pi-$profile: $why" >&2
+        keys="${keys:-$profile}"
+    fi
+fi
+unset PI_PROFILE_PINNED
+if [[ "$keys" != "$profile" ]]; then
+    export PI_PROFILE_KEYS="$keys"
+else
+    unset PI_PROFILE_KEYS
+fi
+suffix="_${keys^^}"
+
 while IFS= read -r name; do
     unset "${name%"$suffix"}"
 done < <(compgen -e | grep -- "$suffix\$" || true)
+
+# Deny by default (06_SYSTEM dev/privacy 4i): the loop above drops a personal key
+# only when the profile has its own twin, so revoking a company key EXPOSED the
+# personal one (DEEPSEEK_API_KEY under pi-teres, 2026-11-13). Every other
+# credential-shaped variable that is not one of this profile's own <KEY>_<PROFILE>
+# leaves the environment too. Names only; no value is read.
+while IFS= read -r name; do
+    [[ "$name" == *"$suffix" ]] && continue
+    unset "$name"
+done < <(compgen -e | grep -E -- '^[A-Z0-9_]+_(API_KEY|API_TOKEN|ACCESS_TOKEN)(_[A-Z0-9]+)?$' || true)
 
 if [[ ! -f "$claude_home/.credentials.json" ]]; then
     echo "pi-$profile: no Claude login in $claude_home — Claude models unavailable" >&2
