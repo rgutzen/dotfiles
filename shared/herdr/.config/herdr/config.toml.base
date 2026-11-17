@@ -166,10 +166,13 @@ enabled = false
 # the sidebar shows what the agent is working on without any extra reporting.
 # `$model` is reported by the pi extension `herdr-metadata.ts` (--token model=<id>);
 # the rule colours a long-context model so it stands out between two agents.
+# `$sandbox` is one Nerd Font glyph from the same extension: green lock = sandboxed
+# with the network cut, yellow shield = sandboxed, network open, red unlock = not
+# sandboxed. Panes of other harnesses report nothing and show no icon.
 [ui.sidebar.agents]
 row_gap = 0
 rows = [
-  ["state_icon", "agent", { token = "$model", dim = true, rules = [{ contains = "1m", ignore_case = true, fg = "#d79921", bold = true, dim = false }] }, "state_text"],
+  ["state_icon", { token = "$sandbox", bold = true, rules = [{ contains = "\uf023", fg = "#98971a" }, { contains = "\uf132", fg = "#d79921" }, { contains = "\uf09c", fg = "#cc241d" }] }, "agent", { token = "$model", dim = true, rules = [{ contains = "1m", ignore_case = true, fg = "#d79921", bold = true, dim = false }] }, "state_text"],
   ["terminal_title_stripped"],
   ["workspace", "tab"],
 ]
