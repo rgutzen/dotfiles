@@ -10,6 +10,11 @@ dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/boo
 -- keeping core window-manager bindings:
 -- omarchy_preinstalled_bindings = false
 
+-- Shared workspaces: one of each, on whichever monitor shows it. Has to load
+-- before the defaults, because it takes Omarchy's per-monitor workspace module
+-- out of the way. See the file.
+require("hypr.workspaces")
+
 -- Load Omarchy defaults.
 require("default.hypr.omarchy")
 
