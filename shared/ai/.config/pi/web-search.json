@@ -2,26 +2,55 @@
   "toolActivation": "dynamic",
   "toolExposure": "deferred",
   "webSearch": {
-    "allowedProviders": ["exa", "brave", "degoog", "duckduckgo"]
+    "allowedProviders": [
+      "exa",
+      "brave",
+      "degoog",
+      "duckduckgo"
+    ]
   },
   "searchRouting": {
-    "providers": ["exa", "brave", "degoog", "duckduckgo"],
-    "fallbackOn": ["unsupported", "transient", "quota", "network", "invalid-response"]
+    "providers": [
+      "exa",
+      "brave",
+      "degoog",
+      "duckduckgo"
+    ],
+    "fallbackOn": [
+      "unsupported",
+      "transient",
+      "quota",
+      "network",
+      "invalid-response"
+    ]
   },
   "fetch": {
-    "answerProvider": "deepseek",
-    "answerModel": "deepseek-flash"
+    "answerProvider": "mistral",
+    "answerModel": "zai-glm-5-3-flash"
   },
   "tools": {
-    "sourceCheck": { "enabled": false }
+    "sourceCheck": {
+      "enabled": false
+    }
   },
   "commands": {
-    "websearch": { "enabled": false },
-    "curator": { "enabled": false },
-    "search": { "enabled": false },
-    "google-account": { "enabled": false }
+    "websearch": {
+      "enabled": false
+    },
+    "curator": {
+      "enabled": false
+    },
+    "search": {
+      "enabled": false
+    },
+    "google-account": {
+      "enabled": false
+    }
   },
   "pdf": {
     "enabled": false
-  }
+  },
+  "summaryModel": "mistral/zai-glm-5-3-flash",
+  "queryRewriteModel": "mistral/zai-glm-5-3-flash",
+  "proxy": "http://127.0.0.1:18081"
 }

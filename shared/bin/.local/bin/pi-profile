@@ -57,7 +57,7 @@ omarchy_claude_home() {
     command -v omarchy >/dev/null 2>&1 || return 1
     command -v jq >/dev/null 2>&1 || return 1
     local json
-    json=$(timeout 5 omarchy agent account list 2>/dev/null) || return 1
+    json=$(timeout 5 omarchy agent account list --json 2>/dev/null) || return 1
     jq -er --arg id "$profile" '
         (if type == "array" then .[] else . end)
         | select(.provider == "claude")
@@ -156,4 +156,12 @@ if [[ ! -f "$claude_home/.credentials.json" ]]; then
     fi
 fi
 
+# Every start goes through the sandbox launcher (06_SYSTEM dev/privacy 8c): the
+# `pi` shell function wraps `pi-<profile>`, but `pi-teres` typed directly, in a
+# herdr pane or from a script would otherwise run pi bare. Already inside a
+# sandbox (the function's own launch, a nested session): run pi as is. The
+# hatch is the launcher's, FAMILIAR_NO_SANDBOX=1, and it is logged there.
+if [[ "${FAMILIAR_SANDBOX:-}" != 1 ]] && command -v familiar >/dev/null 2>&1; then
+    exec familiar boundaries sandbox run -- pi "$@"
+fi
 exec pi "$@"

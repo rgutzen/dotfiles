@@ -50,5 +50,10 @@
     "/home/rg/06_SYSTEM/CONTEXT.md",
     "/home/rg/06_SYSTEM/config/practice/user/user-identity.md",
     "/home/rg/06_SYSTEM/config/practice/conventions/collaboration.md"
+  ],
+  "enabled_providers": [
+    "anthropic",
+    "local-ollama",
+    "mistral"
   ]
 }
