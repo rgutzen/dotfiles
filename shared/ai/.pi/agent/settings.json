@@ -15,6 +15,7 @@
   "extensions": [
     "-builtin:mcp"
   ],
+  "skills": ["-skills/omarchy-app"],
   "extensionChangelogVersions": {
     "{\"source\":\"npm:@gotgenes/pi-permission-system\",\"scope\":\"user\"}": "41.0.0",
     "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.47.0",
@@ -24,6 +25,16 @@
     "claude-bridge/claude-haiku-5-5",
     "claude-bridge/claude-opus-5-5",
     "claude-bridge/claude-sonnet-5-5",
+    "mistral-example/codestral-2508",
+    "mistral-example/deepseek-v4-1-flash-1017",
+    "mistral-example/ministral-14b-2512",
+    "mistral-example/ministral-3b-2512",
+    "mistral-example/ministral-8b-2512",
+    "mistral-example/mistral-large-4",
+    "mistral-example/mistral-medium-3-5",
+    "mistral-example/mistral-small-2603",
+    "mistral-example/zai-glm-5-3",
+    "mistral-example/zai-glm-5-3-flash",
     "mistral/codestral-2508",
     "mistral/deepseek-v4-1-flash-1017",
     "mistral/ministral-14b-2512",

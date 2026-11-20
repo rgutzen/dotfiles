@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Run Pi under a billing profile. Installed as symlinks named pi-<profile>
-# (pi-teres -> pi-profile); the profile is the part of the name after "pi-".
+# (pi-example -> pi-profile); the profile is the part of the name after "pi-".
 #
 #   pi-<profile> login     sign in once to that profile's Claude account; words
-#                          after it go to `claude auth login`, so `pi-teres login
+#                          after it go to `claude auth login`, so `pi-example login
 #                          --sso` or `--email me@work.example` work
 #   pi-<profile> status    show which Claude account the profile resolves to
 #   pi-<profile> [args]    pi under the profile, args passed through
 #
 # A profile changes three things for the whole Pi process:
-#   - Claude: the subscription account. If Omarchy knows an account whose id is
-#     the profile name (omarchy agent account add claude Teres), Pi uses that
-#     account's config home, so Claude history, settings and skills are the one
-#     shared set Omarchy maintains. Otherwise the profile keeps a private login
-#     in ~/.claude-<profile>.
+#   - Claude: the subscription account, from the profile's own login in
+#     ~/.claude-<profile> -- the path 06_SYSTEM's profiles.yaml declares as the
+#     profile's `login:`, so the wrapper and the engine's probe read one login.
+#     An Omarchy account of the same name is ignored: a second login of one
+#     account drifted (its token lapsed while pi ran on the other, 2026-11-20).
 #   - API keys: only this profile's own <KEY>_<PROFILE> variables stay; every
 #     other *_API_KEY / *_API_TOKEN / *_ACCESS_TOKEN is unset, so no personal
 #     provider ID reaches /model, whether or not a company twin exists.
@@ -32,11 +32,9 @@
 # session on the next account). Without 06_SYSTEM a profile runs alone.
 #
 # The directory decides which profile runs (see 40-ai.sh: a .pi-profile file
-# names it). That deliberately overrides Omarchy's machine-wide active account:
-# the nearest profile wins, and omarchy agent account use stays for everything
-# launched outside a marked directory.
+# names it).
 #
-# New profile: omit the Omarchy account, export <KEY>_<PROFILE> keys in
+# New profile: export <KEY>_<PROFILE> keys in
 # ~/.config/bash/local.sh, then
 #   ln -s pi-profile ~/02_AREAS/B_Tech/dotfiles/shared/bin/.local/bin/pi-<profile>
 # A subscription provider (Claude) needs no key at all: sign it in with
@@ -46,40 +44,12 @@ set -euo pipefail
 profile="$(basename "$0")"
 profile="${profile#pi-}"
 if [[ "$profile" == profile || -z "$profile" ]]; then
-    echo "pi-profile: call through a pi-<profile> symlink, e.g. pi-teres" >&2
+    echo "pi-profile: call through a pi-<profile> symlink, e.g. pi-example" >&2
     exit 2
 fi
 export PI_PROFILE="$profile"
 
-# The config home of the Omarchy account named like this profile. Prints
-# nothing when Omarchy has no registry, no claude entry, or no such account.
-omarchy_claude_home() {
-    command -v omarchy >/dev/null 2>&1 || return 1
-    command -v jq >/dev/null 2>&1 || return 1
-    local json
-    json=$(timeout 5 omarchy agent account list --json 2>/dev/null) || return 1
-    jq -er --arg id "$profile" '
-        (if type == "array" then .[] else . end)
-        | select(.provider == "claude")
-        | .accounts[]
-        | select((.id | ascii_downcase) == ($id | ascii_downcase))
-        | .home' <<<"$json"
-}
-
-# Claude keeps ~/.claude.json beside the default home and $DIR/.claude.json
-# inside any other, so the primary account must stay implicit: pointing the
-# variable at ~/.claude would make Claude look for a login that is not there.
-if omarchy_home=$(omarchy_claude_home); then
-    claude_source="omarchy account $profile"
-    if [[ "$omarchy_home" == "$HOME/.claude" ]]; then
-        unset CLAUDE_CONFIG_DIR
-    else
-        export CLAUDE_CONFIG_DIR="$omarchy_home"
-    fi
-else
-    claude_source="profile home"
-    export CLAUDE_CONFIG_DIR="$HOME/.claude-$profile"
-fi
+export CLAUDE_CONFIG_DIR="$HOME/.claude-$profile"
 claude_home="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
 # Exported Anthropic auth outranks the Claude login the profile just picked: an
@@ -94,17 +64,11 @@ done
 
 case "${1:-}" in
     login)
-        if [[ "$claude_source" == omarchy* ]]; then
-            echo "pi-$profile: ${profile^} is an Omarchy account, so its login is Omarchy's." >&2
-            echo "pi-$profile: add or repair it with: omarchy agent account add claude ${profile^}" >&2
-        fi
         exec claude auth login "${@:2}"
         ;;
     status)
         printf 'profile      %s\n' "$profile"
-        printf 'claude home  %s%s\n' "$claude_home" \
-            "$([[ -n "${CLAUDE_CONFIG_DIR:-}" ]] || echo " (implicit)")"
-        printf 'claude from  %s\n' "$claude_source"
+        printf 'claude home  %s\n' "$claude_home"
         exec claude auth status
         ;;
 esac
@@ -139,7 +103,7 @@ done < <(compgen -e | grep -- "$suffix\$" || true)
 
 # Deny by default (06_SYSTEM dev/privacy 4i): the loop above drops a personal key
 # only when the profile has its own twin, so revoking a company key EXPOSED the
-# personal one (DEEPSEEK_API_KEY under pi-teres, 2026-11-13). Every other
+# personal one (DEEPSEEK_API_KEY under pi-example, 2026-11-13). Every other
 # credential-shaped variable that is not one of this profile's own <KEY>_<PROFILE>
 # leaves the environment too. Names only; no value is read.
 while IFS= read -r name; do
@@ -149,19 +113,40 @@ done < <(compgen -e | grep -E -- '^[A-Z0-9_]+_(API_KEY|API_TOKEN|ACCESS_TOKEN)(_
 
 if [[ ! -f "$claude_home/.credentials.json" ]]; then
     echo "pi-$profile: no Claude login in $claude_home — Claude models unavailable" >&2
-    if [[ "$claude_source" == omarchy* ]]; then
-        echo "pi-$profile: sign ${profile^} in with: omarchy agent account add claude ${profile^}" >&2
-    else
-        echo "pi-$profile: sign in with: pi-$profile login" >&2
-    fi
+    echo "pi-$profile: sign in with: pi-$profile login" >&2
 fi
 
+# The model scope. One settings.json serves every profile, so its enabledModels
+# is the union over profiles (06_SYSTEM boundaries compile) and lists
+# mistral/<id> beside mistral-example/<id>. The key loop above unset the personal
+# key, so pi warned "No models match pattern" once per personal twin
+# (2026-11-20). Pass the list minus each <provider>/<id> whose
+# <provider>-<keys>/<id> alias it also holds; --models replaces the setting
+# without a warning. A start that names --models itself, or a subcommand, runs as given.
+scope=()
+settings="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/settings.json"
+case "${1:-}" in
+    install|remove|uninstall|update|list|config|auth|mcp) ;;
+    *)
+        if [[ " $* " != *" --models"* ]] && command -v jq >/dev/null 2>&1 && [[ -r "$settings" ]]; then
+            models=$(jq -r --arg k "$keys" '
+                (.enabledModels // []) as $all
+                | [$all[] | select(
+                    (index("/")) as $i
+                    | $i == null or ((.[:$i] + "-" + $k + .[$i:]) as $twin | $all | index($twin) | not))]
+                | if length > 0 and length < ($all | length) then join(",") else empty end' \
+                "$settings" 2>/dev/null) || models=""
+            [[ -n "$models" ]] && scope=(--models "$models")
+        fi
+        ;;
+esac
+
 # Every start goes through the sandbox launcher (06_SYSTEM dev/privacy 8c): the
-# `pi` shell function wraps `pi-<profile>`, but `pi-teres` typed directly, in a
+# `pi` shell function wraps `pi-<profile>`, but `pi-example` typed directly, in a
 # herdr pane or from a script would otherwise run pi bare. Already inside a
 # sandbox (the function's own launch, a nested session): run pi as is. The
 # hatch is the launcher's, FAMILIAR_NO_SANDBOX=1, and it is logged there.
 if [[ "${FAMILIAR_SANDBOX:-}" != 1 ]] && command -v familiar >/dev/null 2>&1; then
-    exec familiar boundaries sandbox run -- pi "$@"
+    exec familiar boundaries sandbox run -- pi "${scope[@]}" "$@"
 fi
-exec pi "$@"
+exec pi "${scope[@]}" "$@"

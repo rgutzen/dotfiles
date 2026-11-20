@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
-# Regression test for pi-profile Defect 1: jq parse error
-# This test verifies that the fix (adding --json flag) is present in the script
+# pi-profile binds a profile to its own login, ~/.claude-<profile>, the path
+# 06_SYSTEM's profiles.yaml declares; an Omarchy account of the same name is
+# ignored (2026-11-20: two logins of one account drifted apart).
 set -euo pipefail
-
-echo "Running pi-profile regression test..."
-echo ""
-
-PI_PROFILE_SCRIPT="${HOME}/02_AREAS/B_Tech/dotfiles/shared/bin/.local/bin/pi-profile"
-
-# Test: Verify the script uses --json flag with omarchy agent account list
-if grep -q "omarchy agent account list --json" "$PI_PROFILE_SCRIPT"; then
-    echo "PASS: pi-profile uses --json flag with omarchy agent account list"
-    echo ""
-    echo "This fixes the 'jq: parse error: Invalid numeric literal at line 1, column 7' error."
-    echo "The error occurred because omarchy agent account list outputs plain text by default,"
-    echo "and jq cannot parse plain text as JSON. The --json flag ensures JSON output."
+dir=$(cd "$(dirname "$0")" && pwd)
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+ln -s "$dir/pi-profile" "$tmp/pi-example"
+got=$("$tmp/pi-example" status 2>/dev/null | awk '/^claude home/ {print $3}')
+if [[ "$got" == "$HOME/.claude-example" ]]; then
+    echo "PASS: pi-example uses $got"
 else
-    echo "FAIL: pi-profile does not use --json flag with omarchy agent account list"
-    exit 1
+    echo "FAIL: pi-example uses '${got}', expected $HOME/.claude-example"; exit 1
 fi
-
-echo ""
-echo "Test passed!"
+if grep -q "omarchy agent account" "$dir/pi-profile"; then
+    echo "FAIL: pi-profile still consults Omarchy accounts"; exit 1
+fi
+echo "PASS: no Omarchy account lookup"
