@@ -39,7 +39,12 @@ o.bind("SUPER + ALT + W", "herdr work", "xdg-terminal-exec herdr-session work")
 o.bind("SUPER + SHIFT + L", "Dictate", "voice-record")
 
 -- speech out: speak the selection, same key stops playback (voice-out V2).
-o.bind("SUPER + ALT + L", "Speak selection", "speak-selection")
+o.rebind("SUPER + ALT + L", "Speak selection", "speak-selection")
+-- One-chord twin of Omarchy's ALT + SPACE (toggle dictation): speech in on
+-- ALT + SPACE, speech out on CTRL + ALT + SPACE. Never on right Alt: Omarchy
+-- binds ALT + Alt_R as push-to-talk with ignore_mods, so any right-Alt press
+-- starts a recording, and `say` stays silent while one records (2026-11-23).
+o.bind("CTRL + ALT + SPACE", "Speak selection", "speak-selection")
 -- speech out: freeze where it is, press again to continue.
 o.bind("SUPER + ALT + M", "Pause speech", "say --toggle-pause")
 -- speech out: one global mute; stops every lane, chat replies stay silent until pressed again (voice-out C5).
