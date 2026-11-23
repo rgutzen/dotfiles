@@ -22,7 +22,7 @@ mode = "push_to_talk"
 [audio]
 # Audio input device ("default" uses system default)
 # List devices with: pactl list sources short
-device = "default"
+device = "pipewire"   # the node is chosen by PIPEWIRE_NODE in voxtype.service.d/mic.conf
 
 # Sample rate in Hz (whisper expects 16000)
 sample_rate = 16000
