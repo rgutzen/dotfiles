@@ -101,7 +101,7 @@ ubuntu/     OS tier — apt/snap maintenance scripts, Debian shell bits
 arch/       OS tier — Omarchy shell bits (add os-scripts when needed)
 
 secrets.example/   templates — names only, never values
-arm-leak-gate.sh   arms 06_SYSTEM's leak gate here: strict pre-commit and pre-push
+arm-leak-gate.sh   arms 06_SYSTEM's leak gate here: strict, on push only
 .pazras/           leak-allow.txt — what was public before the gate, per file and pattern
 ```
 

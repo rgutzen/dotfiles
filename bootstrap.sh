@@ -200,7 +200,7 @@ for f in bash/local.sh:local.sh git/local:git; do
 done
 
 # ── leak gate (hooks and git config are never tracked) ─────────────────────
-# This repository is public: commits and pushes from it are scanned by
+# This repository is public: pushes from it are scanned by
 # 06_SYSTEM's leak gate, strict. See arm-leak-gate.sh for why and how.
 echo
 echo "── leak gate ──"
