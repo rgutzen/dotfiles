@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "familiar-mcp": {
-      "command": "/home/rg/06_SYSTEM/engine/familiar",
+      "command": "familiar",
       "args": ["context", "mcp"]
     }
   }

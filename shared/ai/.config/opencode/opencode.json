@@ -42,16 +42,16 @@
     "familiar-mcp": {
       "type": "local",
       "command": [
-        "/home/rg/06_SYSTEM/engine/familiar",
+        "familiar",
         "context",
         "mcp"
       ]
     }
   },
   "instructions": [
-    "/home/rg/06_SYSTEM/CONTEXT.md",
-    "/home/rg/06_SYSTEM/config/practice/user/user-identity.md",
-    "/home/rg/06_SYSTEM/config/practice/conventions/collaboration.md"
+    "~/06_SYSTEM/CONTEXT.md",
+    "~/06_SYSTEM/config/practice/user/user-identity.md",
+    "~/06_SYSTEM/config/practice/conventions/collaboration.md"
   ],
   "enabled_providers": [
     "anthropic",

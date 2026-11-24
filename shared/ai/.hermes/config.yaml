@@ -93,12 +93,12 @@ plugins:
   - rtk-rewrite
 hooks:
   on_session_end:
-  - command: /home/rg/06_SYSTEM/engine/familiar context capture --harness=hermes --event=session-end
+  - command: ~/06_SYSTEM/engine/familiar context capture --harness=hermes --event=session-end
     timeout: 5
-  - command: /home/rg/06_SYSTEM/engine/familiar context hermes-session
+  - command: ~/06_SYSTEM/engine/familiar context hermes-session
     timeout: 5
   pre_tool_call:
-  - command: /home/rg/06_SYSTEM/engine/boundaries/guard.py
+  - command: ~/06_SYSTEM/engine/boundaries/guard.py
     timeout: 5
     fail_closed: true
 hooks_auto_accept: true
@@ -165,7 +165,7 @@ platform_toolsets:
   - hermes-google_chat
 mcp_servers:
   familiar-mcp:
-    command: /home/rg/06_SYSTEM/engine/familiar
+    command: ~/06_SYSTEM/engine/familiar
     args:
     - context
     - mcp
