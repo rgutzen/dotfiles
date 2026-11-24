@@ -5,4 +5,4 @@
 // never this file. Away from the keyboard, dialogs and turn ends go to the
 // phone through the relay; it registers the `familiar-remote` chain link
 // (dev/remote R3a-R3d). With no relay running, asks stay at the terminal.
-export { default } from "/home/rg/06_SYSTEM/engine/relay/pi-remote/index.ts";
+export { default } from "/home/rg/06_SYSTEM/engine/interface/relay/pi-remote/index.ts";

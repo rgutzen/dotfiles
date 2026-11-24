@@ -6,7 +6,7 @@ set -euo pipefail
 dir=$(cd "$(dirname "$0")" && pwd)
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 ln -s "$dir/pi-profile" "$tmp/pi-example"
-got=$("$tmp/pi-example" status 2>/dev/null | awk '/^claude home/ {print $3}')
+got=$("$tmp/pi-example" status 2>/dev/null | awk '/^claude home/ {print $3}') || true
 if [[ "$got" == "$HOME/.claude-example" ]]; then
     echo "PASS: pi-example uses $got"
 else

@@ -165,5 +165,8 @@ platform_toolsets:
   - hermes-google_chat
 mcp_servers:
   familiar-mcp:
-    command: /home/rg/06_SYSTEM/engine/cli/familiar-mcp.sh
+    command: /home/rg/06_SYSTEM/engine/familiar
+    args:
+    - context
+    - mcp
     enabled: true

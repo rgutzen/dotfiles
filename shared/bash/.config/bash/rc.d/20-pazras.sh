@@ -6,4 +6,7 @@
 # for every shell, login or not), created by `familiar structure link` and
 # carried in this repo as shared/bin/.local/bin/familiar. Adding engine/ to PATH
 # exposed every engine script as a command, which is not what was wanted.
-[ -f "$HOME/06_SYSTEM/engine/host/pazras-aliases.sh" ] && . "$HOME/06_SYSTEM/engine/host/pazras-aliases.sh"
+# The territory hops (structure's) and the shell's notices (interface's), since
+# 06_SYSTEM's dev/ontology K2i split the old aliases file in two.
+[ -f "$HOME/06_SYSTEM/engine/structure/pazras-aliases.sh" ] && . "$HOME/06_SYSTEM/engine/structure/pazras-aliases.sh"
+[ -f "$HOME/06_SYSTEM/engine/interface/notices.sh" ] && . "$HOME/06_SYSTEM/engine/interface/notices.sh"

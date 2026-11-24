@@ -4,4 +4,4 @@
 // implementation is version-controlled in 06_SYSTEM — edit the source there,
 // never this file. The `ask_user` tool: a terminal dialog in an interactive
 // session, a relay ask under RPC (dev/remote R2b).
-export { default } from "/home/rg/06_SYSTEM/engine/relay/pi-ask-user/index.ts";
+export { default } from "/home/rg/06_SYSTEM/engine/interface/relay/pi-ask-user/index.ts";

@@ -42,7 +42,9 @@
     "familiar-mcp": {
       "type": "local",
       "command": [
-        "/home/rg/06_SYSTEM/engine/cli/familiar-mcp.sh"
+        "/home/rg/06_SYSTEM/engine/familiar",
+        "context",
+        "mcp"
       ]
     }
   },
