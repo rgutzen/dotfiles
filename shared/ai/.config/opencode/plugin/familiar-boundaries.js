@@ -3,4 +3,6 @@
 // opencode scans ~/.config/opencode/plugin/ for plugin modules. The
 // implementation is version-controlled in 06_SYSTEM — edit the source there,
 // never this file.
-export { FamiliarBoundaries } from "/home/rg/06_SYSTEM/engine/boundaries/opencode-plugin/index.js";
+import { homedir } from "node:os";
+const mod = await import(`${homedir()}/06_SYSTEM/engine/boundaries/opencode-plugin/index.js`);
+export const FamiliarBoundaries = mod.FamiliarBoundaries;

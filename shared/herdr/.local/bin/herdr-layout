@@ -21,7 +21,7 @@ arg=${2:-}
 # directory and is the right answer. Called from a popup or from the voice hook
 # there is no HERDR_PANE_ID at all, and $PWD is then the popup's or the voxtype
 # daemon's — so ask herdr for the focused pane instead. Verified 2026-10-24: from
-# ~ the pair split started its agent in /home/rg, not in the focused repo.
+# ~ the pair split started its agent in $HOME, not in the focused repo.
 cur=""
 if [[ -z ${HERDR_PANE_ID:-} ]]; then
     cur=$("$herdr_bin" pane current 2>/dev/null || true)

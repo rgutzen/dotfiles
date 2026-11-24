@@ -7,4 +7,6 @@
 // ORDER MATTERS ON A FRESH MACHINE: the target below exists only once
 // 06_SYSTEM's `feat/deepen` is merged, so stow this AFTER that merge — a shim
 // pointing at an absent file is a load error on every `pi` start.
-export { default } from "/home/rg/06_SYSTEM/engine/orchestration/pi-deepen/index.ts";
+import { homedir } from "node:os";
+const mod = await import(`${homedir()}/06_SYSTEM/engine/orchestration/pi-deepen/index.ts`);
+export default mod.default;

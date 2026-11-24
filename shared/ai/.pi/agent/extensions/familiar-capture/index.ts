@@ -4,4 +4,6 @@
 // implementation is version-controlled in 06_SYSTEM — edit the source there,
 // never this file. Sibling: familiar-guard (boundaries), rtk.ts (command
 // rewrites).
-export { default } from "/home/rg/06_SYSTEM/engine/context/pi-capture/index.ts";
+import { homedir } from "node:os";
+const mod = await import(`${homedir()}/06_SYSTEM/engine/context/pi-capture/index.ts`);
+export default mod.default;
