@@ -7,7 +7,7 @@
 
 [Unit]
 Description=Rebuild the local embedding index over journal/ (D4, incremental)
-Documentation=file:%h/06_SYSTEM/memory/knowledge/system/knowledge/journal-index.md
+Documentation=file:%h/06_SYSTEM/memory/knowledge/system/journal/journal-index.md
 OnFailure=notify@%n.service
 
 [Service]
